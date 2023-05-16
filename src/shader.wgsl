@@ -2,14 +2,16 @@
 @binding(0)
 var otex: texture_storage_2d<rgba8unorm, write>;
 
+const SSAA: u32 = 3u;
+
 const MARCH_MAX_STEPS: i32 = 100000;
 const MAX_DISTANCE: f32 = 1000.0;
-const HIT_DISTANCE: f32 = 0.001;
+const HIT_DISTANCE: f32 = 0.00001;
 
-const STEPS_WHITE: i32 = 300;
+const STEPS_WHITE: i32 = 50;
 
-const MANDELBULB_ITERATIONS: i32 = 100; // Increase to increase the fractal precision
-const MANDELBULB_POWER: f32 = 8.;
+const MANDELBULB_ITERATIONS: i32 = 20; // Increase to increase the fractal precision
+const MANDELBULB_POWER: f32 = 10.;
 
 fn mandelbulb(t: f32, pos: vec3<f32>) -> f32 {
     let Bailout: f32 = 1.15;
@@ -87,8 +89,8 @@ fn render_fragment(t: f32, origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
         var ds: f32 = world_de(t, current_pos);
 
         if (ds < HIT_DISTANCE) {
-            return get_normal(t, current_pos);
-            //return vec3(1., 1., 1.) * (1. - min(1., f32(i) / f32(STEPS_WHITE)));
+            // return get_normal(t, current_pos);
+            return vec3(1., 1., 1.) * (1. - min(1., f32(i) / f32(STEPS_WHITE)));
         }
 
         if (traveled_distance > MAX_DISTANCE) {
@@ -102,14 +104,20 @@ fn render_fragment(t: f32, origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
 }
 
 @compute
-@workgroup_size(1)
+@workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    var uv: vec2<f32> = (vec2(
-        f32(global_id.x) / 2048.,
-        f32(global_id.y) / 2048.
-    ) * 2.) - vec2(1.);
-    //uv /= 20.;
-    var color: vec3<f32> = render_fragment(0., vec3(0., 0., -2.), vec3(uv, 1.4));
+    var color_sum: vec3<f32> = vec3(0.);
+    for (var dx: u32 = 0u; dx <= SSAA; dx += 1u) {
+        for (var dy: u32 = 0u; dy <= SSAA; dy += 1u) {
+            var uv: vec2<f32> = (vec2(
+                f32(global_id.x * SSAA + dx) / f32(2048u * SSAA),
+                f32(global_id.y * SSAA + dy) / f32(2048u * SSAA)
+            ) * 2.) - vec2(1.);
+            //uv /= 20.;
+            var color: vec3<f32> = render_fragment(0., vec3(0., 0., -2.), vec3(uv, 1.4));
+            color_sum += color;
+        }
+    }
 
-    textureStore(otex, global_id.xy, vec4(color, 1.));
+    textureStore(otex, global_id.xy, vec4(color_sum / f32(SSAA * SSAA), 1.));
 }
