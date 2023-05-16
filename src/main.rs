@@ -4,11 +4,13 @@ use std::{borrow::Cow, str::FromStr};
 use wgpu::{util::DeviceExt, PowerPreference};
 
 async fn run() {
-    let output = execute_gpu(512, 512).await.unwrap();
+    let output = execute_gpu(2048, 2048).await.unwrap();
 
+    log::info!("Saving image...");
     image::save_buffer(
-        "image.png", output.as_slice(), 512, 512, image::ColorType::Rgba8
+        "image.bmp", output.as_slice(), 2048, 2048, image::ColorType::Rgba8
     ).unwrap();
+    log::info!("Finished !");
 }
 
 async fn execute_gpu(width: u32, height: u32) -> Option<Vec<u8>> {
@@ -136,6 +138,7 @@ async fn execute_gpu_inner(
 
     // Awaits until `buffer_future` can be read from
     if let Some(Ok(())) = receiver.receive().await {
+        log::info!("Render finish, reading image...");
         let data = buffer_slice.get_mapped_range();
         let result = data.to_vec();
 
