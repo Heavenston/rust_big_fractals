@@ -10,6 +10,7 @@ anyhow = "1.0.71"
 bytemuck = "1.13.1"
 env_logger = "0.10.0"
 futures-intrusive = "0.5.0"
+image = "0.24.6"
 log = { version = "0.4.17", features = ["std", "serde"] }
 pollster = "0.3.0"
 serde = { version = "1.0.163", features = ["derive"] }

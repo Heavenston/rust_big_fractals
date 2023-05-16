@@ -1,38 +1,88 @@
 @group(0)
 @binding(0)
-var<storage, read_write> v_indices: array<u32>; // this is used as both input and output for convenience
+var otex: texture_storage_2d<rgba8unorm, write>;
 
-// The Collatz Conjecture states that for any integer n:
-// If n is even, n = n/2
-// If n is odd, n = 3n+1
-// And repeat this process for each new n, you will always eventually reach 1.
-// Though the conjecture has not been proven, no counterexample has ever been found.
-// This function returns how many times this recurrence needs to be applied to reach 1.
-fn collatz_iterations(n_base: u32) -> u32{
-    var n: u32 = n_base;
-    var i: u32 = 0u;
-    loop {
-        if (n <= 1u) {
+const MARCH_MAX_STEPS: i32 = 100;
+const MAX_DISTANCE: f32 = 1000.0;
+const HIT_DISTANCE: f32 = 0.001;
+
+const MANDELBULB_ITERATIONS: i32 = 10; // Increase to increase the fractal precision
+const MANDELBULB_POWER: f32 = 8.;
+
+fn mandelbulb(t: f32, pos: vec3<f32>) -> f32 {
+    let Bailout: f32 = 1.15;
+    let Power: f32 = MANDELBULB_POWER;
+
+    var z: vec3<f32> = pos;
+    var dr: f32 = 1.0;
+    var r: f32 = 0.0;
+    for (var i: i32 = 0; i < MANDELBULB_ITERATIONS; i++) {
+        r = length(z);
+
+        if (r > Bailout) {
             break;
         }
-        if (n % 2u == 0u) {
-            n = n / 2u;
-        }
-        else {
-            // Overflow? (i.e. 3*n + 1 > 0xffffffffu?)
-            if (n >= 1431655765u) {   // 0x55555555u
-                return 4294967295u;   // 0xffffffffu
-            }
 
-            n = 3u * n + 1u;
-        }
-        i = i + 1u;
+        // convert to polar coordinates
+        var theta: f32 = acos(z.z / r);
+        var phi: f32 = atan2(z.y, z.x);
+        dr = pow(r, Power - 1.) * Power * dr + 1.;
+
+        // scale and rotate the point
+        var zr: f32 = pow(r, Power);
+        theta = theta*Power;
+        phi = phi*Power;
+
+        // convert back to cartesian coordinates
+        z = vec3(
+            sin(theta)*cos(phi),
+            sin(phi)*sin(theta),
+            cos(theta)
+        ) * zr;
+        z = z + pos;
     }
-    return i;
+    return 0.5 * log(r) * r / dr;
+}
+
+fn distance_from_the_sphere(t: f32, pos: vec3<f32>) -> f32 {
+    var radius: f32 = 1.;
+    
+    return length(pos - vec3(0., 0., 0.)) - radius;
+}
+
+fn world_de(t: f32, pos: vec3<f32>) -> f32 {
+    return mandelbulb(t, pos);
+}
+
+fn render_fragment(t: f32, origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
+    var traveled_distance: f32 = 0.;
+
+    for (var i: i32 = 0; i < MARCH_MAX_STEPS; i++) {
+        var current_pos: vec3<f32> = origin + (dir * traveled_distance);
+        var ds: f32 = world_de(t, current_pos);
+
+        if (ds < HIT_DISTANCE) {
+            return vec3(1., 1., 1.) * (1. - f32(i) / f32(MARCH_MAX_STEPS));
+        }
+
+        if (traveled_distance > MAX_DISTANCE) {
+            break;
+        }
+
+        traveled_distance += ds;
+    }
+
+    return vec3(1., 0., 0.);
 }
 
 @compute
 @workgroup_size(1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    v_indices[global_id.x] = collatz_iterations(v_indices[global_id.x]);
+    var uv: vec2<f32> = (vec2(
+        f32(global_id.x) / 500.,
+        f32(global_id.y) / 500.
+    ) * 2.) - vec2(1.);
+    var color: vec3<f32> = render_fragment(0., vec3(0., 0., -2.), vec3(uv, 1.));
+
+    textureStore(otex, global_id.xy, vec4(color, 1.));
 }
