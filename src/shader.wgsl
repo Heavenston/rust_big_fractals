@@ -2,56 +2,37 @@
 @binding(0)
 var otex: texture_storage_2d<rgba8unorm, write>;
 
-const SSAA: u32 = 3u;
+const SSAA: u32 = 4u;
 
-const MARCH_MAX_STEPS: i32 = 100000;
+const MARCH_MAX_STEPS: i32 = 100;
 const MAX_DISTANCE: f32 = 1000.0;
-const HIT_DISTANCE: f32 = 0.00001;
+const HIT_DISTANCE: f32 = 0.001;
 
-const STEPS_WHITE: i32 = 50;
+const STEPS_WHITE: f32 = 0.;
+const STEPS_BLACK: f32 = 110.;
 
-const MANDELBULB_ITERATIONS: i32 = 20; // Increase to increase the fractal precision
-const MANDELBULB_POWER: f32 = 10.;
-
-fn mandelbulb(t: f32, pos: vec3<f32>) -> f32 {
-    let Bailout: f32 = 1.15;
-    let Power: f32 = MANDELBULB_POWER;
-
-    var z: vec3<f32> = pos;
-    var dr: f32 = 1.0;
-    var r: f32 = 0.0;
-    for (var i: i32 = 0; i < MANDELBULB_ITERATIONS; i++) {
-        r = length(z);
-
-        if (r > Bailout) {
-            break;
-        }
-
-        // convert to polar coordinates
-        var theta: f32 = acos(z.z / r);
-        var phi: f32 = atan2(z.y, z.x);
-        dr = pow(r, Power - 1.) * Power * dr + 1.;
-
-        // scale and rotate the point
-        var zr: f32 = pow(r, Power);
-        theta = theta*Power;
-        phi = phi*Power;
-
-        // convert back to cartesian coordinates
-        z = vec3(
-            sin(theta)*cos(phi),
-            sin(phi)*sin(theta),
-            cos(theta)
-        ) * zr;
-        z = z + pos;
-    }
-    return 0.5 * log(r) * r / dr;
+fn box(p: vec3<f32>, b: vec3<f32>) -> f32 {
+    var q = abs(p) - b;
+    return length(max(max(q.x,max(q.y,q.z)),0.)) + min(max(q.x,max(q.y,q.z)),0.);
 }
 
 fn distance_from_the_sphere(t: f32, pos: vec3<f32>) -> f32 {
     var radius: f32 = 1.;
     
     return length(pos - vec3(0., 0., 0.)) - radius;
+}
+
+fn world_de(t: f32, pos: vec3<f32>) -> f32 {
+    var rot: f32 = 0.;
+    var c: f32 = cos(rot);
+    var s: f32 = sin(rot);
+    var npos: vec3<f32> = vec3(
+        pos.x * c - pos.z * s,
+        pos.y,
+        pos.z * c + pos.x * s
+    );
+
+    return distance_from_the_sphere(t, npos);
 }
 
 fn get_normal(t: f32, pos: vec3<f32>) -> vec3<f32> {
@@ -68,19 +49,6 @@ fn get_normal(t: f32, pos: vec3<f32>) -> vec3<f32> {
     return normalize(normal);
 }
 
-fn world_de(t: f32, pos: vec3<f32>) -> f32 {
-    var rot: f32 = 3.14159 / 2.;
-    var c: f32 = cos(rot);
-    var s: f32 = sin(rot);
-    var npos: vec3<f32> = vec3(
-        pos.x * c - pos.z * s,
-        pos.y,
-        pos.z * c + pos.x * s
-    );
-
-    return mandelbulb(t, npos);
-}
-
 fn render_fragment(t: f32, origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
     var traveled_distance: f32 = 0.;
 
@@ -90,7 +58,7 @@ fn render_fragment(t: f32, origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
 
         if (ds < HIT_DISTANCE) {
             // return get_normal(t, current_pos);
-            return vec3(1., 1., 1.) * (1. - min(1., f32(i) / f32(STEPS_WHITE)));
+            return vec3(1.) - vec3(1.) * ((clamp(f32(i), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE));
         }
 
         if (traveled_distance > MAX_DISTANCE) {
@@ -100,21 +68,21 @@ fn render_fragment(t: f32, origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
         traveled_distance += ds;
     }
 
-    return vec3(0., 0., 0.);
+    return vec3(1., 0., 0.);
 }
 
 @compute
 @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var color_sum: vec3<f32> = vec3(0.);
-    for (var dx: u32 = 0u; dx <= SSAA; dx += 1u) {
-        for (var dy: u32 = 0u; dy <= SSAA; dy += 1u) {
+    for (var dx: u32 = 0u; dx < SSAA; dx += 1u) {
+        for (var dy: u32 = 0u; dy < SSAA; dy += 1u) {
             var uv: vec2<f32> = (vec2(
                 f32(global_id.x * SSAA + dx) / f32(2048u * SSAA),
                 f32(global_id.y * SSAA + dy) / f32(2048u * SSAA)
             ) * 2.) - vec2(1.);
             //uv /= 20.;
-            var color: vec3<f32> = render_fragment(0., vec3(0., 0., -2.), vec3(uv, 1.4));
+            var color: vec3<f32> = render_fragment(0., vec3(0., 0., -2.5), vec3(uv, 1.));
             color_sum += color;
         }
     }
