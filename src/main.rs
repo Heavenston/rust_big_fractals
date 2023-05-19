@@ -15,7 +15,7 @@ async fn run() {
 
 async fn execute_gpu(width: u32, height: u32) -> Option<Vec<u8>> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::GL,
+        backends: wgpu::Backends::all(),
         ..Default::default()
     });
     let adapter = instance
@@ -65,7 +65,7 @@ async fn execute_gpu_inner(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::all(),
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[wgpu::TextureFormat::Rgba8Unorm]
     });
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());

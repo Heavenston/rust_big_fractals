@@ -5,7 +5,11 @@ const MAX_DISTANCE: f32 = 1000.0;
 const HIT_DISTANCE: f32 = 0.00005;
 
 const STEPS_WHITE: f32 = 0.;
-const STEPS_BLACK: f32 = 100.;
+const STEPS_BLACK: f32 = 230.;
+
+fn modulo(a: f32, b: f32) -> f32 {
+    return ((a % b) + b) % b;
+}
 
 fn box(p: vec3<f32>, b: vec3<f32>) -> f32 {
     var q = abs(p) - b;
@@ -27,28 +31,37 @@ fn menger_cross(point: vec3<f32>, size: f32, extent: f32) -> f32 {
 }
 
 fn mengerSponge(point: vec3<f32>, side: f32, iterations: i32) -> f32 {
-    return menger_cross(point, side / 9., 10.);
+    // return menger_cross(point, side / 9., 10.);
 
-    // var distance: f32 = box(point, vec3(side));
+    var distance: f32 = box(point, vec3(side));
 
-    // var factor = 1.;
+    var factor = 1.;
+    var cross_middle = point;
 
-    // for (var i = 0; i < 2; i += 1) {
-    //     factor /= 3.;
+    for (var i = 0; i < 30; i += 1) {
+        factor /= 3.;
 
-    //     var mpoint = (point + vec3(side * factor * 3.));
-    //     var cross = menger_cross(mpoint, side * factor, 10.);
-    //     distance = max(
-    //         distance,
-    //         -cross
-    //     );
-    // }
+        var mpoint: vec3<f32> = vec3(
+            modulo(point.x + side * factor, side * factor * 6.) - side * factor,
+            modulo(point.y + side * factor, side * factor * 6.) - side * factor,
+            modulo(point.z + side * factor, side * factor * 6.) - side * factor,
+        );
+        var cross = menger_cross(mpoint, side * factor, 100.);
+        distance = max(
+            distance,
+            -cross
+        );
+
+        cross_middle += vec3(side, 0., 0.) * factor * 2.;
+    }
     
-    // return distance;
+    return distance;
 }
 
 fn world_de(pos: vec3<f32>) -> f32 {
-    var rot: f32 = -45.;
+    var rot: f32 = 0.;
+    rot = -0.5;
+    // rot = -0.8;
     var c: f32 = cos(rot);
     var s: f32 = sin(rot);
     var npos: vec3<f32> = vec3(
@@ -57,9 +70,9 @@ fn world_de(pos: vec3<f32>) -> f32 {
         pos.z * c + pos.x * s
     );
 
-    // return mengerSponge(npos, 1., 2);
+    return mengerSponge(npos, 1., 2);
     // return menger_cross(npos, 0.3, 1.);
-    return distance_from_the_sphere((abs(npos) + vec3(5.)) % 10. - vec3(5.));
+    // return distance_from_the_sphere((abs(npos) + vec3(5.)) % 10. - vec3(5.));
     // return distance_from_the_sphere(npos);
 }
 
@@ -69,9 +82,9 @@ fn get_normal(pos: vec3<f32>) -> vec3<f32> {
     var small_step_z = vec3(0., 0., 0.001);
 
     var normal = vec3(
-        world_de((pos + small_step_x)) - world_de((pos - small_step_x)),
-        world_de((pos + small_step_y)) - world_de((pos - small_step_y)),
-        world_de((pos + small_step_z)) - world_de((pos - small_step_z))
+        abs(world_de((pos + small_step_x)) - world_de((pos - small_step_x))),
+        abs(world_de((pos + small_step_y)) - world_de((pos - small_step_y))),
+        abs(world_de((pos + small_step_z)) - world_de((pos - small_step_z))),
     );
 
     return normalize(normal);
@@ -85,15 +98,16 @@ fn render_fragment(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
         var ds: f32 = world_de(current_pos);
 
         if (ds < HIT_DISTANCE) {
-            // return get_normal(t, current_pos);
-            return vec3(1.) - vec3(1.) * ((clamp(f32(i), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE));
+            var tint = vec3(1.) - vec3(1.) * ((clamp(f32(i), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE));
+            // tint *= get_normal(current_pos);
+            return tint;
         }
 
         if (traveled_distance > MAX_DISTANCE) {
             break;
         }
 
-        traveled_distance += ds;
+        traveled_distance += ds / 2.;
     }
 
     // return vec3(1., 0., 1.);
@@ -142,6 +156,7 @@ fn vertex_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
 fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var color_sum: vec3<f32> = vec3(0.);
     var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
+    uv /= 1.4;
     return vec4(render_fragment(vec3(0., 0., -3.), vec3(uv, 1.)), 1.);
 }
 
