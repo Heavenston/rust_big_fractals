@@ -1,6 +1,6 @@
 #![feature(int_roundings)]
 
-use std::{borrow::Cow, str::FromStr};
+use std::{borrow::Cow, str::FromStr, time::Duration};
 use wgpu::{util::DeviceExt, PowerPreference};
 
 async fn run() {
@@ -14,7 +14,10 @@ async fn run() {
 }
 
 async fn execute_gpu(width: u32, height: u32) -> Option<Vec<u8>> {
-    let instance = wgpu::Instance::default();
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::GL,
+        ..Default::default()
+    });
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: PowerPreference::HighPerformance,
