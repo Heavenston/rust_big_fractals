@@ -1,15 +1,11 @@
-@group(0)
-@binding(0)
-var otex: texture_storage_2d<rgba8unorm, write>;
-
 const SSAA: u32 = 1u;
 
 const MARCH_MAX_STEPS: i32 = 10000000;
 const MAX_DISTANCE: f32 = 1000.0;
-const HIT_DISTANCE: f32 = 0.0001;
+const HIT_DISTANCE: f32 = 0.00005;
 
 const STEPS_WHITE: f32 = 0.;
-const STEPS_BLACK: f32 = 1000.;
+const STEPS_BLACK: f32 = 100.;
 
 fn box(p: vec3<f32>, b: vec3<f32>) -> f32 {
     var q = abs(p) - b;
@@ -64,6 +60,7 @@ fn world_de(pos: vec3<f32>) -> f32 {
     // return mengerSponge(npos, 1., 2);
     // return menger_cross(npos, 0.3, 1.);
     return distance_from_the_sphere((abs(npos) + vec3(5.)) % 10. - vec3(5.));
+    // return distance_from_the_sphere(npos);
 }
 
 fn get_normal(pos: vec3<f32>) -> vec3<f32> {
@@ -99,23 +96,69 @@ fn render_fragment(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
         traveled_distance += ds;
     }
 
-    return vec3(1., 0., 0.);
+    // return vec3(1., 0., 1.);
+    return vec3(world_de(origin + dir) / 100.);
 }
 
-@compute
-@workgroup_size(1)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    var color_sum: vec3<f32> = vec3(0.);
-    for (var dx: u32 = 0u; dx < SSAA; dx += 1u) {
-        for (var dy: u32 = 0u; dy < SSAA; dy += 1u) {
-            var uv: vec2<f32> = (vec2(
-                f32(global_id.x * SSAA + dx) / f32(2048u * SSAA),
-                f32(global_id.y * SSAA + dy) / f32(2048u * SSAA)
-            ) * 2.) - vec2(1.);
-            var color: vec3<f32> = render_fragment(vec3(0., 0., -3.), vec3(uv, 1.));
-            color_sum += color;
-        }
+struct VertexOutput {
+    @location(0) tex_coord: vec2<f32>,
+    @builtin(position) pos: vec4<f32>,
+};
+
+@vertex
+fn vertex_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
+    var result: VertexOutput;
+    result.tex_coord = vec2(0.);
+    result.pos = vec4(0.);
+    if (in_vertex_index == 0u) {
+        result.tex_coord = vec2(0., 0.);
+        result.pos = vec4(-1., -1., 0., 1.);
+    }
+    else if (in_vertex_index == 1u) {
+        result.tex_coord = vec2(1., 0.);
+        result.pos = vec4(1., -1., 0., 1.);
+    }
+    else if (in_vertex_index == 2u) {
+        result.tex_coord = vec2(0., 1.);
+        result.pos = vec4(-1., 1., 0., 1.);
+    }
+    else if (in_vertex_index == 3u) {
+        result.tex_coord = vec2(1., 1.);
+        result.pos = vec4(1., 1., 0., 1.);
+    }
+    else if (in_vertex_index == 4u) {
+        result.tex_coord = vec2(1., 0.);
+        result.pos = vec4(1., -1., 0., 1.);
+    }
+    else if (in_vertex_index == 5u) {
+        result.tex_coord = vec2(0., 1.);
+        result.pos = vec4(-1., 1., 0., 1.);
     }
 
-    textureStore(otex, global_id.xy, vec4(color_sum / f32(SSAA * SSAA), 1.));
+    return result;
 }
+
+@fragment
+fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
+    var color_sum: vec3<f32> = vec3(0.);
+    var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
+    return vec4(render_fragment(vec3(0., 0., -3.), vec3(uv, 1.)), 1.);
+}
+
+// @compute
+// @workgroup_size(1)
+// fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+//     var color_sum: vec3<f32> = vec3(0.);
+//     for (var dx: u32 = 0u; dx < SSAA; dx += 1u) {
+//         for (var dy: u32 = 0u; dy < SSAA; dy += 1u) {
+//             var uv: vec2<f32> = (vec2(
+//                 f32(global_id.x * SSAA + dx) / f32(2048u * SSAA),
+//                 f32(global_id.y * SSAA + dy) / f32(2048u * SSAA)
+//             ) * 2.) - vec2(1.);
+//             var color: vec3<f32> = render_fragment(vec3(0., 0., -3.), vec3(uv, 1.));
+//             color_sum += color;
+//         }
+//     }
+
+//     textureStore(otex, global_id.xy, vec4(color_sum / f32(SSAA * SSAA), 1.));
+// }

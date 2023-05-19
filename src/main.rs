@@ -53,7 +53,7 @@ async fn execute_gpu_inner(
     height: u32,
 ) -> Option<Vec<u8>> {
     // Loads the shader from WGSL
-    let cs_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+    let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
     });
@@ -79,33 +79,62 @@ async fn execute_gpu_inner(
         mapped_at_creation: false,
     });
 
-    let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,
         layout: None,
-        module: &cs_module,
-        entry_point: "main",
+        vertex: wgpu::VertexState {
+            module: &shader_module,
+            entry_point: "vertex_main",
+            buffers: &[],
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            unclipped_depth: false,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            conservative: false,
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader_module,
+            entry_point: "fragment_main",
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                blend: None,
+                write_mask: wgpu::ColorWrites::all(),
+            })],
+        }),
+        multiview: None,
     });
 
-    // Instantiates the bind group, once again specifying the binding of buffers.
-    let bind_group_layout = compute_pipeline.get_bind_group_layout(0);
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: wgpu::BindingResource::TextureView(&texture_view),
-        }],
-    });
-
-    // A command encoder executes one or many pipelines.
-    // It is to WebGPU what a command buffer is to Vulkan.
     let mut encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
     {
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-        cpass.set_pipeline(&compute_pipeline);
-        cpass.set_bind_group(0, &bind_group, &[]);
-        cpass.dispatch_workgroups(width, height, 1); // Number of cells to run, the (x,y,z) size of item being processed
+        let mut render_pass = encoder.begin_render_pass(
+            &wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &texture_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                            store: true,
+                        },
+                    })
+                ],
+                depth_stencil_attachment: None,
+            }
+        );
+        render_pass.set_pipeline(&render_pipeline);
+        render_pass.draw(0..6, 0..1)
     }
     encoder.copy_texture_to_buffer(
         wgpu::ImageCopyTextureBase {
