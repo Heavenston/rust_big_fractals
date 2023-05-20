@@ -99,7 +99,7 @@ fn render_fragment(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
 
         if (ds < HIT_DISTANCE) {
             var tint = vec3(1.) - vec3(1.) * ((clamp(f32(i), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE));
-            tint *= get_normal(current_pos);
+            // tint *= get_normal(current_pos);
             return tint;
         }
 
@@ -161,6 +161,7 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var color_sum: vec3<f32> = vec3(0.);
     var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
     uv = (vec3(uv, 1.) * uv_transform).xy;
+    uv /= 2.;
     return vec4(render_fragment(vec3(0., 0., -3.), vec3(uv, 1.)), 1.);
 }
 

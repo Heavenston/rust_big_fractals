@@ -2,20 +2,52 @@
 
 use std::{borrow::Cow, str::FromStr, time::Duration};
 use wgpu::{util::DeviceExt, PowerPreference};
+use image::GenericImage;
+
+#[derive(Debug, Clone, Copy)]
+pub struct SectionInfo {
+    size: u32,
+    subdivisions: u32,
+    subdiv_pos: (u32, u32),
+}
 
 async fn run() {
-    let size = 2u32.pow(13);
-    log::info!("Using size {size:?}");
-    let output = execute_gpu(size).await.unwrap();
+    let mut si = SectionInfo {
+        size: 2u32.pow(10),
+        subdivisions: 8,
+        subdiv_pos: (0, 0),
+    };
 
-    log::info!("Saving image...");
-    image::save_buffer(
-        "image.bmp", output.as_slice(), size, size, image::ColorType::Rgba8
-    ).unwrap();
+    let mut total_image = image::RgbaImage::new(
+        si.size * si.subdivisions, si.size * si.subdivisions
+    );
+    println!("Total image is of size {:?}", total_image.dimensions());
+
+    for sx in 0..si.subdivisions {
+        for sy in 0..si.subdivisions {
+            log::info!("Rendering si {si:?}");
+            si.subdiv_pos = (sx, sy);
+            let output = execute_gpu(si).await.unwrap();
+            let image = image::RgbaImage::from_raw(si.size, si.size, output)
+                .unwrap();
+
+            log::info!("Saving image...");
+            // image.save(&format!("image_{sx}x{sy}.bmp")).unwrap();
+            log::info!("Copying to aggregate image");
+            total_image.copy_from(
+                &image,
+                si.size * sx,
+                si.size * (si.subdivisions - sy - 1)
+            ).unwrap();
+        }
+    }
+
+    log::info!("Saving Aggregate...");
+    total_image.save("image.png").unwrap();
     log::info!("Finished !");
 }
 
-async fn execute_gpu(size: u32) -> Option<Vec<u8>> {
+async fn execute_gpu(si: SectionInfo) -> Option<Vec<u8>> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::VULKAN,
         ..Default::default()
@@ -33,8 +65,8 @@ async fn execute_gpu(size: u32) -> Option<Vec<u8>> {
                 label: None,
                 features: wgpu::Features::empty(),
                 limits: wgpu::Limits {
-                    max_texture_dimension_2d: size,
-                    max_buffer_size: size as u64 * size as u64 * 4,
+                    max_texture_dimension_2d: si.size,
+                    max_buffer_size: (si.size as u64).pow(2) * 4,
                     ..wgpu::Limits::downlevel_defaults()
                 },
             },
@@ -49,13 +81,13 @@ async fn execute_gpu(size: u32) -> Option<Vec<u8>> {
         return None;
     }
 
-    execute_gpu_inner(&device, &queue, size).await
+    execute_gpu_inner(&device, &queue, si).await
 }
 
 async fn execute_gpu_inner(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    size: u32,
+    si: SectionInfo,
 ) -> Option<Vec<u8>> {
     // Loads the shader from WGSL
     let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -66,7 +98,7 @@ async fn execute_gpu_inner(
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d {
-            width: size, height: size, depth_or_array_layers: 1
+            width: si.size, height: si.size, depth_or_array_layers: 1
         },
         mip_level_count: 1,
         sample_count: 1,
@@ -81,7 +113,7 @@ async fn execute_gpu_inner(
     let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size:
-            (size as u64).pow(2) * pixel_size as u64,
+            (si.size as u64).pow(2) * pixel_size as u64,
         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -101,11 +133,17 @@ async fn execute_gpu_inner(
             }
         ],
     });
+
+    let uv_scale = 1. / (si.subdivisions as f32);
+    let uv_span = 1. - 1. / (si.subdivisions as f32);
+    let uv_x = si.subdiv_pos.0 as f32;
+    let uv_y = si.subdiv_pos.1 as f32;
+
     let uv_transform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
         contents: bytemuck::bytes_of(&[
-            0.5f32, 0., 0., 0.,
-            0.,   0.5, 0., 0.,
+            uv_scale, 0., uv_scale * uv_x * 2. - uv_span, 0.,
+            0.,   uv_scale, uv_scale * uv_y * 2. - uv_span, 0.,
             0.,   0., 1., 0.,
         ]),
         usage: wgpu::BufferUsages::UNIFORM
@@ -196,8 +234,8 @@ async fn execute_gpu_inner(
             buffer: &staging_buffer,
             layout: wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(pixel_size * size),
-                rows_per_image: Some(pixel_size * size),
+                bytes_per_row: Some(pixel_size * si.size),
+                rows_per_image: Some(pixel_size * si.size),
             }
         },
         texture.size()
