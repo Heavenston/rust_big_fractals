@@ -1,11 +1,11 @@
 const SSAA: u32 = 1u;
 
-const MARCH_MAX_STEPS: i32 = 200;
-const MAX_DISTANCE: f32 = 10000000.0;
-const HIT_DISTANCE: f32 = 0.00025;
+const MARCH_MAX_STEPS: i32 = 800;
+const MAX_DISTANCE: f32 = 100000000.0;
+const HIT_DISTANCE: f32 = 0.00005;
 
 const STEPS_WHITE: f32 = 0.;
-const STEPS_BLACK: f32 = 200.;
+const STEPS_BLACK: f32 = 800.;
 
 struct DeResult {
     distance: f32,
@@ -101,7 +101,8 @@ fn world_de(pos: vec3<f32>) -> DeResult {
     var npos = pos;
 
     var f: DeResult;
-    f.distance = 9999999999999.;
+    f.distance = 999999999999999.;
+
     f = de_min(f, de_max(
         box_de(npos - vec3(1., 0., 0.), vec3(1.)),
         sphere_de(npos - vec3(1., 0., 0.), 1.4)
@@ -114,17 +115,21 @@ fn world_de(pos: vec3<f32>) -> DeResult {
         box_de(npos + vec3(1., 0.4, 0.), vec3(0.2)),
         vec3(0., 1., 0.)
     ));
-    return f;
+
+    // f = de_min(f,
+    //     sphere_de(modulo_vec3(pos, 5.), 1.)
+    // );
 
     // return box_de(npos, vec3(1.));
     // return menger_sponge_de(npos, 1., 2);
     // return menger_cross_de(npos, 1., 1.);
-    // return sphere_de(modulo_vec3(pos, 5.), 1.);
     // return sphere_de(npos, 1.2);
     // return de_min(
     //     sphere_de(npos + vec3(0., 0.5, 0.), 1.),
     //     sphere_de(npos - vec3(0., 0.5, 0.), 1.),
     // );
+
+    return f;
 }
 
 fn get_normal(pos: vec3<f32>) -> vec3<f32> {
@@ -184,16 +189,18 @@ fn cast_bouncing_ray(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
     var color: vec3<f32> = rs.color;
     if (!rs.hit)
     { return rs.color; }
-
     var oo_tint = 1. - (clamp(f32(rs.steps), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE);
 
-    for (var b = 0u; b < 20u; b++) {
+    var direction = dir;
+    for (var b = 0u; b < 1u; b++) {
         var n = rs.normal;
+        var reflected = direction - 2. * dot(direction, n) * n;
 
-        var nrs = cast_ray(rs.point, n);
+        var nrs = cast_ray(rs.point, reflected);
         if (!nrs.hit) { break; }
         color = color * 0.8 + 0.2 * nrs.color;
 
+        direction = reflected;
         rs = nrs;
     }
 
@@ -257,10 +264,10 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
         -sin(angle), 0.,  cos(angle),
     );
 
-    var ray_direction = normalize(vec3(uv, 3.));
+    var ray_direction = normalize(vec3(uv, 1.5));
     ray_direction *= rot_mat;
 
-    var cam_pos = vec3(0., 0., -4.5);
+    var cam_pos = vec3(0., 0., -3.);
     cam_pos *= rot_mat;
 
     return vec4(cast_bouncing_ray(cam_pos, ray_direction), 1.);
