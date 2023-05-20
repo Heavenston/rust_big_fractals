@@ -4,21 +4,18 @@ use std::{borrow::Cow, str::FromStr, time::Duration};
 use wgpu::{util::DeviceExt, PowerPreference};
 
 async fn run() {
-    let size = (
-        2u32.pow(13),
-        2u32.pow(13),
-    );
+    let size = 2u32.pow(13);
     log::info!("Using size {size:?}");
-    let output = execute_gpu(size.0, size.1).await.unwrap();
+    let output = execute_gpu(size).await.unwrap();
 
     log::info!("Saving image...");
     image::save_buffer(
-        "image.bmp", output.as_slice(), size.0, size.1, image::ColorType::Rgba8
+        "image.bmp", output.as_slice(), size, size, image::ColorType::Rgba8
     ).unwrap();
     log::info!("Finished !");
 }
 
-async fn execute_gpu(width: u32, height: u32) -> Option<Vec<u8>> {
+async fn execute_gpu(size: u32) -> Option<Vec<u8>> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::VULKAN,
         ..Default::default()
@@ -36,8 +33,8 @@ async fn execute_gpu(width: u32, height: u32) -> Option<Vec<u8>> {
                 label: None,
                 features: wgpu::Features::empty(),
                 limits: wgpu::Limits {
-                    max_texture_dimension_2d: u32::max(width, height),
-                    max_buffer_size: width as u64 * height as u64 * 4,
+                    max_texture_dimension_2d: size,
+                    max_buffer_size: size as u64 * size as u64 * 4,
                     ..wgpu::Limits::downlevel_defaults()
                 },
             },
@@ -52,14 +49,13 @@ async fn execute_gpu(width: u32, height: u32) -> Option<Vec<u8>> {
         return None;
     }
 
-    execute_gpu_inner(&device, &queue, width, height).await
+    execute_gpu_inner(&device, &queue, size).await
 }
 
 async fn execute_gpu_inner(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    width: u32,
-    height: u32,
+    size: u32,
 ) -> Option<Vec<u8>> {
     // Loads the shader from WGSL
     let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -69,7 +65,9 @@ async fn execute_gpu_inner(
 
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: None,
-        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width: size, height: size, depth_or_array_layers: 1
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -83,7 +81,7 @@ async fn execute_gpu_inner(
     let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size:
-            width as u64 * height as u64 * pixel_size as u64,
+            (size as u64).pow(2) * pixel_size as u64,
         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -198,8 +196,8 @@ async fn execute_gpu_inner(
             buffer: &staging_buffer,
             layout: wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(pixel_size * height),
-                rows_per_image: Some(pixel_size * width),
+                bytes_per_row: Some(pixel_size * size),
+                rows_per_image: Some(pixel_size * size),
             }
         },
         texture.size()
