@@ -1,39 +1,64 @@
 const SSAA: u32 = 1u;
 
-const MARCH_MAX_STEPS: i32 = 10000000;
+const MARCH_MAX_STEPS: i32 = 2000;
 const MAX_DISTANCE: f32 = 1000.0;
-const HIT_DISTANCE: f32 = 0.00005;
+const HIT_DISTANCE: f32 = 0.00025;
 
 const STEPS_WHITE: f32 = 0.;
-const STEPS_BLACK: f32 = 230.;
+const STEPS_BLACK: f32 = 2000.;
+
+struct DeResult {
+    distance: f32,
+    color: vec3<f32>,
+}
+
+fn de_min(a: DeResult, b: DeResult) -> DeResult {
+    if (a.distance > b.distance) {
+        return b;
+    }
+    return a;
+}
+fn de_max(a: DeResult, b: DeResult) -> DeResult {
+    if (a.distance > b.distance) {
+        return a;
+    }
+    return b;
+}
 
 fn modulo(a: f32, b: f32) -> f32 {
     return ((a % b) + b) % b;
 }
 
-fn box(p: vec3<f32>, b: vec3<f32>) -> f32 {
-    var q = abs(p) - b;
-    return length(max(max(q.x,max(q.y,q.z)),0.)) + min(max(q.x,max(q.y,q.z)),0.);
+fn modulo_vec3(a: vec3<f32>, b: f32) -> vec3<f32> {
+    return (((a + vec3(b / 2.)) % b) + vec3(b)) % b - vec3(b / 2.);
 }
 
-fn distance_from_the_sphere(pos: vec3<f32>) -> f32 {
-    var radius: f32 = 1.;
-    
-    return length(pos - vec3(0., 0., 0.)) - radius;
+fn box_de(pos: vec3<f32>, box_size: vec3<f32>) -> DeResult {
+    var result: DeResult;
+    var q = abs(pos) - box_size;
+    result.distance =
+        length(max(max(q.x,max(q.y,q.z)),0.)) + min(max(q.x,max(q.y,q.z)),0.);
+    result.color = vec3(1., 1., 1.);
+    return result;
 }
 
-fn menger_cross(point: vec3<f32>, size: f32, extent: f32) -> f32 {
-    return min(
-        box(point, vec3(size, extent, size)), min(
-        box(point, vec3(extent, size, size)),
-        box(point, vec3(size, size, extent))
+fn sphere_de(pos: vec3<f32>, radius: f32) -> DeResult {
+    var result: DeResult;
+    result.distance = length(pos - vec3(0., 0., 0.)) - radius;
+    result.color = vec3(1., 1., 1.);
+    return result;
+}
+
+fn menger_cross_de(point: vec3<f32>, size: f32, extent: f32) -> DeResult {
+    return de_min(
+        box_de(point, vec3(size, extent, size)), de_min(
+        box_de(point, vec3(extent, size, size)),
+        box_de(point, vec3(size, size, extent))
     ));
 }
 
-fn mengerSponge(point: vec3<f32>, side: f32, iterations: i32) -> f32 {
-    // return menger_cross(point, side / 9., 10.);
-
-    var distance: f32 = box(point, vec3(side));
+fn menger_sponge_de(point: vec3<f32>, side: f32, iterations: i32) -> DeResult {
+    var distance: f32 = box_de(point, vec3(side)).distance;
 
     var factor = 1.;
     var cross_middle = point;
@@ -46,7 +71,7 @@ fn mengerSponge(point: vec3<f32>, side: f32, iterations: i32) -> f32 {
             modulo(point.y + side * factor, side * factor * 6.) - side * factor,
             modulo(point.z + side * factor, side * factor * 6.) - side * factor,
         );
-        var cross = menger_cross(mpoint, side * factor, 100.);
+        var cross = menger_cross_de(mpoint, side * factor, 100.).distance;
         distance = max(
             distance,
             -cross
@@ -54,25 +79,19 @@ fn mengerSponge(point: vec3<f32>, side: f32, iterations: i32) -> f32 {
 
         cross_middle += vec3(side, 0., 0.) * factor * 2.;
     }
-    
-    return distance;
+
+    var result: DeResult;
+    result.distance = distance;
+    result.color = vec3(1., 1., 1.);
+    return result;
 }
 
-fn world_de(pos: vec3<f32>) -> f32 {
-    var rot: f32 = 0.;
-    // rot = -0.5;
-    // rot = -0.8;
-    var c: f32 = cos(rot);
-    var s: f32 = sin(rot);
-    var npos: vec3<f32> = vec3(
-        pos.x * c - pos.z * s,
-        pos.y,
-        pos.z * c + pos.x * s
-    );
+fn world_de(pos: vec3<f32>) -> DeResult {
+    var npos = pos;
 
-    return mengerSponge(npos, 1., 2);
+    // return menger_sponge_de(npos, 1., 2);
     // return menger_cross(npos, 0.3, 1.);
-    // return distance_from_the_sphere((abs(npos) + vec3(5.)) % 10. - vec3(5.));
+    return sphere_de(modulo_vec3(pos, 5.), 1.);
     // return distance_from_the_sphere(npos);
 }
 
@@ -81,25 +100,24 @@ fn get_normal(pos: vec3<f32>) -> vec3<f32> {
     var small_step_y = vec3(0., 0.001, 0.);
     var small_step_z = vec3(0., 0., 0.001);
 
-    var normal = vec3(
-        abs(world_de((pos + small_step_x)) - world_de((pos - small_step_x))),
-        abs(world_de((pos + small_step_y)) - world_de((pos - small_step_y))),
-        abs(world_de((pos + small_step_z)) - world_de((pos - small_step_z))),
-    );
-
-    return normalize(normal);
+    return normalize(vec3(
+        world_de(pos + small_step_x).distance - world_de(pos - small_step_x).distance,
+        world_de(pos + small_step_y).distance - world_de(pos - small_step_y).distance,
+        world_de(pos + small_step_z).distance - world_de(pos - small_step_z).distance,
+    ));
 }
 
-fn render_fragment(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
+fn cast_ray(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
     var traveled_distance: f32 = 0.;
 
     for (var i: i32 = 0; i < MARCH_MAX_STEPS; i++) {
         var current_pos: vec3<f32> = origin + (dir * traveled_distance);
-        var ds: f32 = world_de(current_pos);
+        var rs = world_de(current_pos);
 
-        if (ds < HIT_DISTANCE) {
+        if (rs.distance < HIT_DISTANCE) {
             var tint = vec3(1.) - vec3(1.) * ((clamp(f32(i), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE));
-            // tint *= get_normal(current_pos);
+            tint *= rs.color;
+            tint *= abs(get_normal(current_pos));
             return tint;
         }
 
@@ -107,11 +125,10 @@ fn render_fragment(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
             break;
         }
 
-        traveled_distance += ds / 2.;
+        traveled_distance += rs.distance / 2.;
     }
 
-    // return vec3(1., 0., 1.);
-    return vec3(world_de(origin + dir) / 100.);
+    return vec3(0., 0., 0.);
 }
 
 struct VertexOutput {
@@ -161,8 +178,8 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var color_sum: vec3<f32> = vec3(0.);
     var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
     uv = (vec3(uv, 1.) * uv_transform).xy;
-    uv /= 2.;
-    return vec4(render_fragment(vec3(0., 0., -3.), vec3(uv, 1.)), 1.);
+    uv /= 1.3;
+    return vec4(cast_ray(vec3(0., 0., -3.), vec3(uv, 1.)), 1.);
 }
 
 // @compute

@@ -14,7 +14,7 @@ pub struct SectionInfo {
 async fn run() {
     let mut si = SectionInfo {
         size: 2u32.pow(10),
-        subdivisions: 8,
+        subdivisions: 2,
         subdiv_pos: (0, 0),
     };
 
@@ -25,8 +25,8 @@ async fn run() {
 
     for sx in 0..si.subdivisions {
         for sy in 0..si.subdivisions {
-            log::info!("Rendering si {si:?}");
             si.subdiv_pos = (sx, sy);
+            log::info!("Rendering si {si:?}");
             let output = execute_gpu(si).await.unwrap();
             let image = image::RgbaImage::from_raw(si.size, si.size, output)
                 .unwrap();
