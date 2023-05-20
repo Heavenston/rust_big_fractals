@@ -125,7 +125,7 @@ fn cast_ray(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
             break;
         }
 
-        traveled_distance += rs.distance / 2.;
+        traveled_distance += rs.distance;
     }
 
     return vec3(0., 0., 0.);
@@ -179,7 +179,7 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
     uv = (vec3(uv, 1.) * uv_transform).xy;
     uv /= 1.3;
-    return vec4(cast_ray(vec3(0., 0., -3.), vec3(uv, 1.)), 1.);
+    return vec4(cast_ray(vec3(0., 0., -3.), normalize(vec3(uv, 1.))), 1.);
 }
 
 // @compute
