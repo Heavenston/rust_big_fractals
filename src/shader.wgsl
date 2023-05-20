@@ -152,11 +152,15 @@ fn vertex_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
     return result;
 }
 
+@group(0)
+@binding(0)
+var<uniform> uv_transform: mat3x3<f32>;
+
 @fragment
 fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var color_sum: vec3<f32> = vec3(0.);
     var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
-    uv /= 2.;
+    uv = (vec3(uv, 1.) * uv_transform).xy;
     return vec4(render_fragment(vec3(0., 0., -3.), vec3(uv, 1.)), 1.);
 }
 

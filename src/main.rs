@@ -88,9 +88,50 @@ async fn execute_gpu_inner(
         mapped_at_creation: false,
     });
 
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::all(),
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None
+                },
+                count: None
+            }
+        ],
+    });
+    let uv_transform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: None,
+        contents: bytemuck::bytes_of(&[
+            0.5f32, 0., 0., 0.,
+            0.,   0.5, 0., 0.,
+            0.,   0., 1., 0.,
+        ]),
+        usage: wgpu::BufferUsages::UNIFORM
+    });
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uv_transform_buffer.as_entire_binding()
+            }
+        ]
+    });
+
+    let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,
-        layout: None,
+        layout: Some(&render_pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader_module,
             entry_point: "vertex_main",
@@ -142,6 +183,7 @@ async fn execute_gpu_inner(
                 depth_stencil_attachment: None,
             }
         );
+        render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.set_pipeline(&render_pipeline);
         render_pass.draw(0..6, 0..1)
     }
