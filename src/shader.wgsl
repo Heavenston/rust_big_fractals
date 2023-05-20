@@ -38,7 +38,7 @@ fn mengerSponge(point: vec3<f32>, side: f32, iterations: i32) -> f32 {
     var factor = 1.;
     var cross_middle = point;
 
-    for (var i = 0; i < 30; i += 1) {
+    for (var i = 0; i < 9; i += 1) {
         factor /= 3.;
 
         var mpoint: vec3<f32> = vec3(
@@ -60,7 +60,7 @@ fn mengerSponge(point: vec3<f32>, side: f32, iterations: i32) -> f32 {
 
 fn world_de(pos: vec3<f32>) -> f32 {
     var rot: f32 = 0.;
-    rot = -0.5;
+    // rot = -0.5;
     // rot = -0.8;
     var c: f32 = cos(rot);
     var s: f32 = sin(rot);
@@ -99,7 +99,7 @@ fn render_fragment(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
 
         if (ds < HIT_DISTANCE) {
             var tint = vec3(1.) - vec3(1.) * ((clamp(f32(i), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE));
-            // tint *= get_normal(current_pos);
+            tint *= get_normal(current_pos);
             return tint;
         }
 
@@ -156,7 +156,7 @@ fn vertex_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
 fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var color_sum: vec3<f32> = vec3(0.);
     var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
-    uv /= 1.4;
+    uv /= 2.;
     return vec4(render_fragment(vec3(0., 0., -3.), vec3(uv, 1.)), 1.);
 }
 

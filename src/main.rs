@@ -4,18 +4,23 @@ use std::{borrow::Cow, str::FromStr, time::Duration};
 use wgpu::{util::DeviceExt, PowerPreference};
 
 async fn run() {
-    let output = execute_gpu(2048, 2048).await.unwrap();
+    let size = (
+        2u32.pow(13),
+        2u32.pow(13),
+    );
+    log::info!("Using size {size:?}");
+    let output = execute_gpu(size.0, size.1).await.unwrap();
 
     log::info!("Saving image...");
     image::save_buffer(
-        "image.bmp", output.as_slice(), 2048, 2048, image::ColorType::Rgba8
+        "image.bmp", output.as_slice(), size.0, size.1, image::ColorType::Rgba8
     ).unwrap();
     log::info!("Finished !");
 }
 
 async fn execute_gpu(width: u32, height: u32) -> Option<Vec<u8>> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
+        backends: wgpu::Backends::VULKAN,
         ..Default::default()
     });
     let adapter = instance
@@ -30,7 +35,11 @@ async fn execute_gpu(width: u32, height: u32) -> Option<Vec<u8>> {
             &wgpu::DeviceDescriptor {
                 label: None,
                 features: wgpu::Features::empty(),
-                limits: wgpu::Limits::downlevel_defaults(),
+                limits: wgpu::Limits {
+                    max_texture_dimension_2d: u32::max(width, height),
+                    max_buffer_size: width as u64 * height as u64 * 4,
+                    ..wgpu::Limits::downlevel_defaults()
+                },
             },
             None,
         )
