@@ -13,8 +13,8 @@ pub struct SectionInfo {
 
 async fn run() {
     let mut si = SectionInfo {
-        size: 2u32.pow(10),
-        subdivisions: 2,
+        size: 2u32.pow(11),
+        subdivisions: 4,
         subdiv_pos: (0, 0),
     };
 
@@ -43,7 +43,7 @@ async fn run() {
     }
 
     // log::info!("Resizing image...");
-    // let total_image = image::imageops::resize(&total_image, 4096, 4096, image::imageops::FilterType::Gaussian);
+    // let total_image = image::imageops::resize(&total_image, 2048, 2048, image::imageops::FilterType::Gaussian);
     log::info!("Saving Aggregate...");
     total_image.save("image.png").unwrap();
     log::info!("Finished !");
