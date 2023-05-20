@@ -1,11 +1,11 @@
 const SSAA: u32 = 1u;
 
-const MARCH_MAX_STEPS: i32 = 800;
+const MARCH_MAX_STEPS: i32 = 100;
 const MAX_DISTANCE: f32 = 100000000.0;
 const HIT_DISTANCE: f32 = 0.00005;
 
 const STEPS_WHITE: f32 = 0.;
-const STEPS_BLACK: f32 = 800.;
+const STEPS_BLACK: f32 = 80.;
 
 struct DeResult {
     distance: f32,
@@ -74,7 +74,7 @@ fn menger_sponge_de(point: vec3<f32>, side: f32, iterations: i32) -> DeResult {
     var factor = 1.;
     var cross_middle = point;
 
-    for (var i = 0; i < 9; i += 1) {
+    for (var i = 0; i < 7; i += 1) {
         factor /= 3.;
 
         var mpoint: vec3<f32> = vec3(
@@ -103,25 +103,28 @@ fn world_de(pos: vec3<f32>) -> DeResult {
     var f: DeResult;
     f.distance = 999999999999999.;
 
-    f = de_min(f, de_max(
-        box_de(npos - vec3(1., 0., 0.), vec3(1.)),
-        sphere_de(npos - vec3(1., 0., 0.), 1.4)
-    ));
-    f = de_min(f, de_color(
-        box_de(npos + vec3(1., -0.4, 0.), vec3(0.2)),
-        vec3(1., 0., 0.)
-    ));
-    f = de_min(f, de_color(
-        box_de(npos + vec3(1., 0.4, 0.), vec3(0.2)),
-        vec3(0., 1., 0.)
-    ));
+    // f = de_min(f, de_max(
+    //     box_de(npos - vec3(1., 0., 0.), vec3(1.)),
+    //     sphere_de(npos - vec3(1., 0., 0.), 1.4)
+    // ));
+    // f = de_min(f, de_color(
+    //     box_de(npos + vec3(1., -0.4, 0.), vec3(0.2)),
+    //     vec3(1., 0., 0.)
+    // ));
+    // f = de_min(f, de_color(
+    //     box_de(npos + vec3(1., 0.4, 0.), vec3(0.2)),
+    //     vec3(0., 1., 0.)
+    // ));
 
     // f = de_min(f,
     //     sphere_de(modulo_vec3(pos, 5.), 1.)
     // );
 
+    f = de_min(f,
+        menger_sponge_de(npos, 1., 2)
+    );
+
     // return box_de(npos, vec3(1.));
-    // return menger_sponge_de(npos, 1., 2);
     // return menger_cross_de(npos, 1., 1.);
     // return sphere_de(npos, 1.2);
     // return de_min(
@@ -133,9 +136,9 @@ fn world_de(pos: vec3<f32>) -> DeResult {
 }
 
 fn get_normal(pos: vec3<f32>) -> vec3<f32> {
-    var small_step_x = vec3(0.0001, 0., 0.);
-    var small_step_y = vec3(0., 0.0001, 0.);
-    var small_step_z = vec3(0., 0., 0.0001);
+    var small_step_x = vec3(0.00005, 0., 0.);
+    var small_step_y = vec3(0., 0.00005, 0.);
+    var small_step_z = vec3(0., 0., 0.00005);
 
     return normalize(vec3(
         world_de(pos + small_step_x).distance - world_de(pos - small_step_x).distance,
@@ -186,25 +189,30 @@ fn cast_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
 
 fn cast_bouncing_ray(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
     var rs = cast_ray(origin, dir);
-    var color: vec3<f32> = rs.color;
+    var color: vec3<f32> = abs(rs.normal);
     if (!rs.hit)
     { return rs.color; }
     var oo_tint = 1. - (clamp(f32(rs.steps), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE);
 
     var direction = dir;
-    for (var b = 0u; b < 1u; b++) {
+    for (var b = 0u; b < 3u; b++) {
         var n = rs.normal;
         var reflected = direction - 2. * dot(direction, n) * n;
 
         var nrs = cast_ray(rs.point, reflected);
-        if (!nrs.hit) { break; }
-        color = color * 0.8 + 0.2 * nrs.color;
+        var c = nrs.color;
+        if (nrs.hit) {
+            c = abs(nrs.normal);
+        }
+        color = color * 0.75 + 0.25 * c;
 
+        if (!nrs.hit) { break; }
+        
         direction = reflected;
         rs = nrs;
     }
 
-    color *= oo_tint;
+    // color *= oo_tint;
 
     return color;
 }
@@ -258,16 +266,17 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     uv = (vec3(uv, 1.) * uv_transform).xy;
 
     var angle = 3.14 / 4.;
+    angle = 0.;
     var rot_mat =  mat3x3(
         cos(angle),  0.,  sin(angle),
         0.,          1.,  0.,
         -sin(angle), 0.,  cos(angle),
     );
 
-    var ray_direction = normalize(vec3(uv, 1.5));
+    var ray_direction = normalize(vec3(uv, 0.8));
     ray_direction *= rot_mat;
 
-    var cam_pos = vec3(0., 0., -3.);
+    var cam_pos = vec3(0., 0., 0.);
     cam_pos *= rot_mat;
 
     return vec4(cast_bouncing_ray(cam_pos, ray_direction), 1.);
