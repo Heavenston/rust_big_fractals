@@ -261,7 +261,7 @@ impl BigImageApp {
                         let i = image::open("image.png").unwrap();
                         let ni = image::imageops::resize(
                             &i, IMAGE_SECTION_SIZE, IMAGE_SECTION_SIZE,
-                            image::imageops::Gaussian
+                            image::imageops::Lanczos3
                         );
                         ni
                     }
@@ -462,7 +462,10 @@ impl BigImageApp {
         let mut last_update = Instant::now();
 
         event_loop.run(move |event, _, control_flow| {
-            control_flow.set_poll();
+            control_flow.set_wait_until(Ord::min(
+                last_render + render_interval,
+                last_update + update_interval
+            ));
 
             match event {
                 Event::WindowEvent {
