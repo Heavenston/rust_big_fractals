@@ -20,15 +20,23 @@ pub async fn start_app() {
     BigImageApp::new().await
 }
 
+#[derive(Debug, Clone, Copy)]
+struct SectionPosition {
+    pub subdivisions: u32,
+    pub pos: (u32, u32),
+}
+
 #[derive(Debug)]
 struct ImageSection {
-    loading_image: Arc<(AtomicBool, Mutex<Option<image::RgbaImage>>)>,
+    pub loading_image: Arc<(AtomicBool, Mutex<Option<image::RgbaImage>>)>,
 
-    image: image::RgbaImage,
-    bind_group: wgpu::BindGroup,
-    texture: wgpu::Texture,
-    sampler: wgpu::Sampler,
-    transform_buffer: wgpu::Buffer,
+    pub image: image::RgbaImage,
+    pub bind_group: wgpu::BindGroup,
+    pub texture: wgpu::Texture,
+    pub sampler: wgpu::Sampler,
+    pub transform_buffer: wgpu::Buffer,
+
+    pub position: SectionPosition,
 }
 
 #[allow(dead_code)]
@@ -241,22 +249,32 @@ impl BigImageApp {
             just_pressed_keys: HashSet::default(),
         };
 
-        this.image_sections.push(
-            this.latent_image_load(|| {
-                let i = image::open("image.png").unwrap();
-                let ni = image::imageops::resize(
-                    &i, IMAGE_SECTION_SIZE, IMAGE_SECTION_SIZE,
-                    image::imageops::Gaussian
-                );
-                ni
-            })
-        );
+        let subs = 4;
+        for cx in 0..subs {
+            for cy in 0..subs {
+                this.image_sections.push(this.latent_image_load(
+                    SectionPosition {
+                        subdivisions: subs,
+                        pos: (cx, cy),
+                    },
+                    || {
+                        let i = image::open("image.png").unwrap();
+                        let ni = image::imageops::resize(
+                            &i, IMAGE_SECTION_SIZE, IMAGE_SECTION_SIZE,
+                            image::imageops::Gaussian
+                        );
+                        ni
+                    }
+                ));
+            }
+        }
 
         this.start(event_loop);
     }
 
     fn latent_image_load(
         &self,
+        position: SectionPosition,
         f: impl FnOnce() -> image::RgbaImage + Send + Sync + 'static
     ) -> ImageSection {
         let loading_image: Arc<(AtomicBool, Mutex<Option<image::RgbaImage>>)>
@@ -274,11 +292,12 @@ impl BigImageApp {
         });
 
         let t_image = image::RgbaImage::new(IMAGE_SECTION_SIZE, IMAGE_SECTION_SIZE);
-        self.create_image_section(t_image, loading_image)
+        self.create_image_section(position, t_image, loading_image)
     }
 
     fn create_image_section(
         &self,
+        position: SectionPosition,
         image: image::RgbaImage,
         loading_image: Arc<(AtomicBool, Mutex<Option<image::RgbaImage>>)>,
     ) -> ImageSection {
@@ -308,7 +327,7 @@ impl BigImageApp {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             }, image.as_bytes());
@@ -317,12 +336,18 @@ impl BigImageApp {
             &wgpu::TextureViewDescriptor { ..Default::default() }
         );
 
+        let scale = 1. / (position.subdivisions as f32);
+        let size = scale * 2.;
+
+        let dx = -1. + scale + (position.pos.0 as f32) * size;
+        let dy = -1. + scale + (position.pos.1 as f32) * size;
+
         let transform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::bytes_of::<[f32; 12]>(&[
-                1. , 0. , 0. ,    /* PADDING */ 0.,
-                0. , 1. , 0. ,    /* PADDING */ 0.,
-                0. , 0. , 1. ,    /* PADDING */ 0.,
+                scale, 0. , dx,    /* PADDING */ 0.,
+                0. , scale, -dy,    /* PADDING */ 0.,
+                0. , 0. , 1.,    /* PADDING */ 0.,
             ]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
@@ -353,7 +378,9 @@ impl BigImageApp {
             bind_group,
             texture,
             sampler,
-            transform_buffer
+            transform_buffer,
+
+            position
         }
     }
 

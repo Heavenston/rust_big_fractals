@@ -24,31 +24,31 @@ fn vertex_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
     var uv = vec2(0., 0.);
 
     if (in_vertex_index == 0u) {
-        uv = vec2(0., 0.);
+        uv = vec2(0., 1.);
         pos = vec2(-1., -1.);
     }
     else if (in_vertex_index == 1u) {
-        uv = vec2(1., 0.);
+        uv = vec2(1., 1.);
         pos = vec2(1., -1.);
     }
     else if (in_vertex_index == 2u) {
-        uv = vec2(0., 1.);
+        uv = vec2(0., 0.);
         pos = vec2(-1., 1.);
     }
     else if (in_vertex_index == 3u) {
-        uv = vec2(1., 1.);
+        uv = vec2(1., 0.);
         pos = vec2(1., 1.);
     }
     else if (in_vertex_index == 4u) {
-        uv = vec2(1., 0.);
+        uv = vec2(1., 1.);
         pos = vec2(1., -1.);
     }
     else if (in_vertex_index == 5u) {
-        uv = vec2(0., 1.);
+        uv = vec2(0., 0.);
         pos = vec2(-1., 1.);
     }
 
-    pos = (vec3(pos.xy, 1.) * viewport_transform * image_transform).xy;
+    pos = (vec3(pos.xy, 1.) * image_transform * viewport_transform).xy;
 
     var result: VertexOutput;
     result.uv = uv;
