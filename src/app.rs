@@ -389,9 +389,9 @@ impl BigImageApp {
         let x = (size.height as f32) / (size.width as f32);
         self.queue.write_buffer(&self.viewport_transform_buffer, 0,
             bytemuck::bytes_of::<[f32; 12]>(&[
-                x * self.camera_zoom  , 0., -self.camera_x ,    /* PADDING */ 0.,
-                0. , self.camera_zoom, -self.camera_y ,    /* PADDING */ 0.,
-                0. , 0., 1. ,    /* PADDING */ 0.,
+                x * self.camera_zoom  , 0.              , -self.camera_x * self.camera_zoom,    /* PADDING */ 0.,
+                0.                    , self.camera_zoom, -self.camera_y * self.camera_zoom,    /* PADDING */ 0.,
+                0.                    , 0.              , 1.                               ,    /* PADDING */ 0.,
             ])
         );
     }
