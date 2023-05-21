@@ -1,10 +1,10 @@
 
-use std::borrow::Cow;
+use std::{borrow::Cow, time::{Duration, Instant}, collections::HashSet};
 
 use image::EncodableLayout;
 use wgpu::util::DeviceExt;
 use winit::{
-    event::{Event, WindowEvent},
+    event::{Event, WindowEvent, ElementState, VirtualKeyCode, MouseScrollDelta},
     event_loop::EventLoop,
     window::{WindowBuilder, Window},
 };
@@ -45,6 +45,13 @@ struct BigImageApp {
 
     image_section_bind_group_layout: wgpu::BindGroupLayout,
     image_sections: Vec<ImageSection>,
+
+    camera_x: f32,
+    camera_y: f32,
+    camera_zoom: f32,
+
+    pressed_keys: HashSet<VirtualKeyCode>,
+    just_pressed_keys: HashSet<VirtualKeyCode>,
 }
 
 impl BigImageApp {
@@ -110,12 +117,12 @@ impl BigImageApp {
 
         let viewport_transform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::bytes_of(&[
+            contents: bytemuck::bytes_of::<[f32; 12]>(&[
                 1., 0., 0.,    /* PADDING */ 0.,
                 0., 1., 0.,    /* PADDING */ 0.,
                 0., 0., 1.,    /* PADDING */ 0.,
             ]),
-            usage: wgpu::BufferUsages::UNIFORM,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let viewport_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -200,7 +207,7 @@ impl BigImageApp {
                 multiview: None,
             });
 
-        let this = Self {
+        let mut this = Self {
             window,
 
             surface_config,
@@ -218,7 +225,18 @@ impl BigImageApp {
 
             image_section_bind_group_layout,
             image_sections: vec![],
+
+            camera_x: 0.,
+            camera_y: 0.,
+            camera_zoom: 1.,
+
+            pressed_keys: HashSet::default(),
+            just_pressed_keys: HashSet::default(),
         };
+
+        this.image_sections.push(
+            this.create_image_section(image::RgbaImage::new(500, 500))
+        );
 
         this.start(event_loop);
     }
@@ -261,12 +279,12 @@ impl BigImageApp {
 
         let transform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::bytes_of(&[
-                1., 0., 0.,    /* PADDING */ 0.,
-                0., 1., 0.,    /* PADDING */ 0.,
-                0., 0., 1.,    /* PADDING */ 0.,
+            contents: bytemuck::bytes_of::<[f32; 12]>(&[
+                1. , 0. , 0. ,    /* PADDING */ 0.,
+                0. , 1. , 0. ,    /* PADDING */ 0.,
+                0. , 0. , 1. ,    /* PADDING */ 0.,
             ]),
-            usage: wgpu::BufferUsages::UNIFORM,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -297,9 +315,51 @@ impl BigImageApp {
         }
     }
 
+    fn update_viewport_transform(&mut self) {
+        let size = self.window.inner_size();
+        let x = (size.height as f32) / (size.width as f32);
+        self.queue.write_buffer(&self.viewport_transform_buffer, 0,
+            bytemuck::bytes_of::<[f32; 12]>(&[
+                x * self.camera_zoom  , 0., -self.camera_x ,    /* PADDING */ 0.,
+                0. , self.camera_zoom, -self.camera_y ,    /* PADDING */ 0.,
+                0. , 0., 1. ,    /* PADDING */ 0.,
+            ])
+        );
+    }
+
+    fn update(&mut self, elapsed: Duration) {
+        let dt = elapsed.as_secs_f32();
+
+        let camera_move_speed = (dt * 4.) / self.camera_zoom;
+
+        if self.pressed_keys.contains(&VirtualKeyCode::Up)
+        { self.camera_y += camera_move_speed; }
+        if self.pressed_keys.contains(&VirtualKeyCode::Down)
+        { self.camera_y -= camera_move_speed; }
+
+        if self.pressed_keys.contains(&VirtualKeyCode::Left)
+        { self.camera_x -= camera_move_speed; }
+        if self.pressed_keys.contains(&VirtualKeyCode::Right)
+        { self.camera_x += camera_move_speed; }
+
+        if self.just_pressed_keys.contains(&VirtualKeyCode::R) {
+            self.camera_x = 0.;
+            self.camera_y = 0.;
+            self.camera_zoom = 1.;
+        }
+
+        self.just_pressed_keys.clear();
+    }
+
     pub fn start(mut self, event_loop: EventLoop<()>) {
+        let render_interval = Duration::from_secs_f32(1. / 60.);
+        let update_interval = Duration::from_secs_f32(1. / 30.);
+
+        let mut last_render = Instant::now();
+        let mut last_update = Instant::now();
+
         event_loop.run(move |event, _, control_flow| {
-            control_flow.set_wait();
+            control_flow.set_poll();
 
             match event {
                 Event::WindowEvent {
@@ -318,11 +378,49 @@ impl BigImageApp {
                     self.surface.configure(&self.device, &self.surface_config);
                     self.window.request_redraw();
                 }
+                Event::WindowEvent {
+                    event: WindowEvent::KeyboardInput {
+                        device_id: _, input, is_synthetic: _
+                    },
+                    ..
+                } => {
+                    let Some(kc) = input.virtual_keycode else { return };
+                    match input.state {
+                        ElementState::Pressed => {
+                            self.pressed_keys.insert(kc);
+                            self.just_pressed_keys.insert(kc);
+                        },
+                        ElementState::Released => {
+                            self.pressed_keys.remove(&kc);
+                            self.just_pressed_keys.remove(&kc);
+                        },
+                    }
+                }
+                Event::WindowEvent {
+                    event: WindowEvent::MouseWheel {
+                        device_id: _, delta, phase: _, modifiers: _
+                    },
+                    ..
+                } => {
+                    let MouseScrollDelta::LineDelta(_, motion) = delta
+                        else { return };
+                    self.camera_zoom *= 1.2f32.powf(motion);
+                }
                 Event::MainEventsCleared => {
                     self.device.poll(wgpu::Maintain::Poll);
-                    self.window.request_redraw();
+
+                    if last_render.elapsed() > render_interval {
+                        last_render = Instant::now();
+                        self.window.request_redraw();
+                    }
+                    let elapsed_update = last_update.elapsed();
+                    if elapsed_update > update_interval {
+                        last_update = Instant::now();
+                        self.update(elapsed_update);
+                    }
                 },
                 Event::RedrawRequested(_) => {
+                    self.update_viewport_transform();
                     self.redraw();
                 },
                 _ => ()
@@ -348,7 +446,7 @@ impl BigImageApp {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLUE),
                         store: true,
                     },
                 })],

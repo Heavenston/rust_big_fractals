@@ -20,38 +20,39 @@ struct VertexOutput {
 
 @vertex
 fn vertex_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
-    var result: VertexOutput;
-    result.uv = vec2(0.);
-    result.pos = vec4(0.);
+    var pos = vec2(0., 0.);
+    var uv = vec2(0., 0.);
+
     if (in_vertex_index == 0u) {
-        result.uv = vec2(0., 0.);
-        result.pos = vec4(-1., -1., 0., 1.);
+        uv = vec2(0., 0.);
+        pos = vec2(-1., -1.);
     }
     else if (in_vertex_index == 1u) {
-        result.uv = vec2(1., 0.);
-        result.pos = vec4(1., -1., 0., 1.);
+        uv = vec2(1., 0.);
+        pos = vec2(1., -1.);
     }
     else if (in_vertex_index == 2u) {
-        result.uv = vec2(0., 1.);
-        result.pos = vec4(-1., 1., 0., 1.);
+        uv = vec2(0., 1.);
+        pos = vec2(-1., 1.);
     }
     else if (in_vertex_index == 3u) {
-        result.uv = vec2(1., 1.);
-        result.pos = vec4(1., 1., 0., 1.);
+        uv = vec2(1., 1.);
+        pos = vec2(1., 1.);
     }
     else if (in_vertex_index == 4u) {
-        result.uv = vec2(1., 0.);
-        result.pos = vec4(1., -1., 0., 1.);
+        uv = vec2(1., 0.);
+        pos = vec2(1., -1.);
     }
     else if (in_vertex_index == 5u) {
-        result.uv = vec2(0., 1.);
-        result.pos = vec4(-1., 1., 0., 1.);
+        uv = vec2(0., 1.);
+        pos = vec2(-1., 1.);
     }
 
-    result.pos = vec4(
-        (vec3(result.pos.xy, 1.) * viewport_transform * image_transform).xy,
-        0., 1.
-    );
+    pos = (vec3(pos.xy, 1.) * viewport_transform * image_transform).xy;
+
+    var result: VertexOutput;
+    result.uv = uv;
+    result.pos = vec4(pos, 0., 1.);
 
     return result;
 }
