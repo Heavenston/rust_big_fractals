@@ -7,9 +7,28 @@ const HIT_DISTANCE: f32 = 0.00005;
 const STEPS_WHITE: f32 = 0.;
 const STEPS_BLACK: f32 = 500.;
 
+struct SurfaceMaterial {
+    color: vec3<f32>,
+    reflexion_strength: f32,
+}
+
 struct DeResult {
     distance: f32,
-    color: vec3<f32>,
+    material: SurfaceMaterial,
+}
+
+fn new_surface_material() -> SurfaceMaterial {
+    var d: SurfaceMaterial;
+    d.color = vec3(1.);
+    d.reflexion_strength = 0.;
+    return d;
+}
+
+fn new_de_result() -> DeResult {
+    var d: DeResult;
+    d.distance = MAX_DISTANCE;
+    d.material = new_surface_material();
+    return d;
 }
 
 fn de_inv(a: DeResult) -> DeResult {
@@ -30,12 +49,6 @@ fn de_max(a: DeResult, b: DeResult) -> DeResult {
     return b;
 }
 
-fn de_color(a: DeResult, color: vec3<f32>) -> DeResult {
-    var na = a;
-    na.color = color;
-    return na;
-}
-
 fn modulo(a: f32, b: f32) -> f32 {
     return ((a % b) + b) % b;
 }
@@ -45,18 +58,16 @@ fn modulo_vec3(a: vec3<f32>, b: f32) -> vec3<f32> {
 }
 
 fn box_de(pos: vec3<f32>, box_size: vec3<f32>) -> DeResult {
-    var result: DeResult;
+    var result: DeResult = new_de_result();
     var q = abs(pos) - box_size;
     result.distance =
         length(max(max(q.x,max(q.y,q.z)),0.)) + min(max(q.x,max(q.y,q.z)),0.);
-    result.color = vec3(1., 1., 1.);
     return result;
 }
 
 fn sphere_de(pos: vec3<f32>, radius: f32) -> DeResult {
-    var result: DeResult;
+    var result: DeResult = new_de_result();
     result.distance = length(pos - vec3(0., 0., 0.)) - radius;
-    result.color = vec3(1., 1., 1.);
     return result;
 }
 
@@ -91,9 +102,8 @@ fn menger_sponge_de(point: vec3<f32>, side: f32, iterations: i32) -> DeResult {
         cross_middle += vec3(side, 0., 0.) * factor * 2.;
     }
 
-    var result: DeResult;
+    var result: DeResult = new_de_result();
     result.distance = distance;
-    result.color = vec3(1., 1., 1.);
     return result;
 }
 
@@ -108,15 +118,13 @@ fn mandelbulb_de(pos: vec3<f32>) -> DeResult {
     var dr: f32 = 1.0;
     var r: f32 = 0.0;
 
-    var result: DeResult;
-    result.color = vec3(1.);
-
+    var material: SurfaceMaterial = new_surface_material();
     for (var i: i32 = 0; i < MANDELBULB_ITERATIONS; i++) {
         r = length(z);
 
         if (r > Bailout) {
             let x = clamp(f32(i) / 23., 0., 1.);
-            result.color =
+            material.color =
                 (vec3(1., 0., 0.) * x)        +
                 (vec3(1., 1., 1.) * (1. - x));
             break;
@@ -141,6 +149,8 @@ fn mandelbulb_de(pos: vec3<f32>) -> DeResult {
         z = z + pos;
     }
 
+    var result = new_de_result();
+    result.material = material;
     result.distance = 0.5 * log(r) * r / dr;
     return result;
 }
@@ -148,8 +158,7 @@ fn mandelbulb_de(pos: vec3<f32>) -> DeResult {
 fn world_de(pos: vec3<f32>) -> DeResult {
     var npos = pos;
 
-    var f: DeResult;
-    f.distance = 999999999999999.;
+    var f: DeResult = new_de_result();
 
     // f = de_min(f, de_max(
     //     box_de(npos - vec3(1., 0., 0.), vec3(1.)),
@@ -207,10 +216,11 @@ fn get_normal(pos: vec3<f32>) -> vec3<f32> {
 struct RayCastResult {
     hit: bool,
     steps: i32,
-    color: vec3<f32>,
     point: vec3<f32>,
     normal: vec3<f32>,
     distance: f32,
+
+    material: SurfaceMaterial,
 }
 
 fn cast_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
@@ -224,10 +234,11 @@ fn cast_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
             var result: RayCastResult;
             result.steps = i;
             result.hit = true;
-            result.color = rs.color;
             result.normal = get_normal(current_pos);
             result.distance = rs.distance;
             result.point = current_pos;
+
+            result.material = rs.material;
             return result;
         }
 
@@ -240,18 +251,16 @@ fn cast_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
 
     var result: RayCastResult;
     result.hit = false;
-    result.color = vec3(0.3, 0.3, 0.8);
+    result.material.color = vec3(0.3, 0.3, 0.8);
     return result;
 }
 
-fn cast_bouncing_ray(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
+fn shaded_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
     var rs = cast_ray(origin, dir);
-    var color: vec3<f32> = rs.color;
-    if (!rs.hit)
-    { return rs.color; }
+    if (!rs.hit) { return rs; }
 
     var oo_tint = 1. - (clamp(f32(rs.steps), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE);
-    color *= oo_tint;
+    rs.material.color *= oo_tint;
 
     // let LIGHT_POSITION = vec3(0., 3., 0.);
     let light_direction = normalize(vec3(0.2, 1., 1.));
@@ -261,9 +270,32 @@ fn cast_bouncing_ray(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
     if (!hit_light.hit) {
         diffuse_intensity = clamp(dot(rs.normal, light_direction), 0.2, 1.);
     }
-    color *= diffuse_intensity;
+    rs.material.color *= diffuse_intensity;
 
-    return color;
+    return rs;
+}
+
+fn cast_bouncing_ray(init_point: vec3<f32>, init_dir: vec3<f32>) -> vec3<f32> {
+    var rs = shaded_ray(init_point, init_dir);
+    var total_color = rs.material.color;
+    var dir = init_dir;
+
+    for (
+        var i = 0u;
+        rs.hit && rs.material.reflexion_strength > 0. && i < 20u;
+        i += 1u
+    ) {
+        var reflexion = dir - 2. * dot(dir, rs.normal) * rs.normal;
+
+        var nrs = shaded_ray(rs.point + reflexion * HIT_DISTANCE, reflexion);
+        var strength = rs.material.reflexion_strength;
+        total_color = total_color * (1. - strength) + nrs.material.color * strength;
+
+        dir = reflexion;
+        rs = nrs;
+    }
+
+    return total_color;
 }
 
 struct VertexOutput {
