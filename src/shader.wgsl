@@ -1,4 +1,17 @@
 
+@group(0)
+@binding(0)
+var<uniform> viewport_transform: mat3x3<f32>;
+
+@group(1)
+@binding(0)
+var splr: sampler;
+@group(1)
+@binding(1)
+var txture: texture_2d<f32>;
+@group(1)
+@binding(2)
+var<uniform> image_transform: mat3x3<f32>; 
 
 struct VertexOutput {
     @location(0) uv: vec2<f32>,
@@ -34,6 +47,11 @@ fn vertex_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
         result.uv = vec2(0., 1.);
         result.pos = vec4(-1., 1., 0., 1.);
     }
+
+    result.pos = vec4(
+        (vec3(result.pos.xy, 1.) * viewport_transform * image_transform).xy,
+        0., 1.
+    );
 
     return result;
 }

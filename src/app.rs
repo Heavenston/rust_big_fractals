@@ -1,17 +1,31 @@
 
 use std::borrow::Cow;
 
+use image::EncodableLayout;
+use wgpu::util::DeviceExt;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::EventLoop,
     window::{WindowBuilder, Window},
 };
 
+const IMAGE_SECTION_SIZE: u32 = 2048;
+
 pub async fn start_app() {
     BigImageApp::new().await
 }
 
-pub struct BigImageApp {
+#[derive(Debug)]
+struct ImageSection {
+    image: image::RgbaImage,
+    bind_group: wgpu::BindGroup,
+    texture: wgpu::Texture,
+    sampler: wgpu::Sampler,
+    transform_buffer: wgpu::Buffer,
+}
+
+#[allow(dead_code)]
+struct BigImageApp {
     window: Window,
 
     surface_config: wgpu::SurfaceConfiguration,
@@ -24,6 +38,13 @@ pub struct BigImageApp {
     queue: wgpu::Queue,
 
     render_pipeline: wgpu::RenderPipeline,
+
+    viewport_bind_group_layout: wgpu::BindGroupLayout,
+    viewport_bind_group: wgpu::BindGroup,
+    viewport_transform_buffer: wgpu::Buffer,
+
+    image_section_bind_group_layout: wgpu::BindGroupLayout,
+    image_sections: Vec<ImageSection>,
 }
 
 impl BigImageApp {
@@ -48,7 +69,7 @@ impl BigImageApp {
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 features: wgpu::Features::empty(),
-                limits: wgpu::Limits::downlevel_webgl2_defaults()
+                limits: wgpu::Limits::downlevel_defaults()
                     .using_resolution(adapter.limits()),
             }, None).await.expect("Failed to create device");
 
@@ -73,9 +94,74 @@ impl BigImageApp {
             ),
         });
 
+        let viewport_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None
+                },
+                count: None,
+            }],
+        });
+
+        let viewport_transform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::bytes_of(&[
+                1., 0., 0.,    /* PADDING */ 0.,
+                0., 1., 0.,    /* PADDING */ 0.,
+                0., 0., 1.,    /* PADDING */ 0.,
+            ]),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        let viewport_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &viewport_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(
+                        viewport_transform_buffer.as_entire_buffer_binding()
+                    ),
+                }
+            ],
+        });
+
+        let image_section_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false
+                },
+                count: None,
+            },wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None
+                },
+                count: None,
+            }],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[],
+            bind_group_layouts: &[&viewport_bind_group_layout, &image_section_bind_group_layout],
             push_constant_ranges: &[],
         });
         let render_pipeline =
@@ -126,9 +212,89 @@ impl BigImageApp {
             device, queue,
             
             render_pipeline,
+            viewport_bind_group_layout,
+            viewport_bind_group,
+            viewport_transform_buffer,
+
+            image_section_bind_group_layout,
+            image_sections: vec![],
         };
 
         this.start(event_loop);
+    }
+
+    fn create_image_section(&self, image: image::RgbaImage) -> ImageSection {
+        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: None,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            lod_min_clamp: 1.,
+            lod_max_clamp: 1.,
+            compare: None,
+            anisotropy_clamp: 1,
+            border_color: None,
+        });
+
+        let texture = self.device.create_texture_with_data(&self.queue,
+            &wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d {
+                    width: image.width(),
+                    height: image.height(),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            }, image.as_bytes());
+
+        let texture_view = texture.create_view(
+            &wgpu::TextureViewDescriptor { ..Default::default() }
+        );
+
+        let transform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::bytes_of(&[
+                1., 0., 0.,    /* PADDING */ 0.,
+                0., 1., 0.,    /* PADDING */ 0.,
+                0., 0., 1.,    /* PADDING */ 0.,
+            ]),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.image_section_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Buffer(transform_buffer.as_entire_buffer_binding()),
+                }
+            ],
+        });
+
+        ImageSection {
+            image,
+            bind_group,
+            texture,
+            sampler,
+            transform_buffer
+        }
     }
 
     pub fn start(mut self, event_loop: EventLoop<()>) {
@@ -153,6 +319,7 @@ impl BigImageApp {
                     self.window.request_redraw();
                 }
                 Event::MainEventsCleared => {
+                    self.device.poll(wgpu::Maintain::Poll);
                     self.window.request_redraw();
                 },
                 Event::RedrawRequested(_) => {
@@ -188,7 +355,11 @@ impl BigImageApp {
                 depth_stencil_attachment: None,
             });
             rpass.set_pipeline(&self.render_pipeline);
-            rpass.draw(0..6, 0..1);
+            rpass.set_bind_group(0, &self.viewport_bind_group, &[]);
+            for is in self.image_sections.iter() {
+                rpass.set_bind_group(1, &is.bind_group, &[]);
+                rpass.draw(0..6, 0..1);
+            }
         }
 
         self.queue.submit(Some(encoder.finish()));
