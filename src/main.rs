@@ -42,8 +42,8 @@ async fn run() {
         }
     }
 
-    // log::info!("Resizing image...");
-    // let total_image = image::imageops::resize(&total_image, 2048, 2048, image::imageops::FilterType::Gaussian);
+    log::info!("Resizing image...");
+    let total_image = image::imageops::resize(&total_image, 2048, 2048, image::imageops::FilterType::Gaussian);
     log::info!("Saving Aggregate...");
     total_image.save("image.png").unwrap();
     log::info!("Finished !");

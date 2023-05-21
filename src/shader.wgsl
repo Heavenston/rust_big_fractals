@@ -5,7 +5,7 @@ const MAX_DISTANCE: f32 = 100000000.0;
 const HIT_DISTANCE: f32 = 0.00005;
 
 const STEPS_WHITE: f32 = 0.;
-const STEPS_BLACK: f32 = 120.;
+const STEPS_BLACK: f32 = 500.;
 
 struct DeResult {
     distance: f32,
@@ -97,6 +97,48 @@ fn menger_sponge_de(point: vec3<f32>, side: f32, iterations: i32) -> DeResult {
     return result;
 }
 
+const MANDELBULB_ITERATIONS: i32 = 50; // Increase to increase the fractal precision
+const MANDELBULB_POWER: f32 = 8.;
+
+fn mandelbulb_de(pos: vec3<f32>) -> DeResult {
+    let Bailout: f32 = 1.15;
+    let Power: f32 = MANDELBULB_POWER;
+
+    var z: vec3<f32> = pos;
+    var dr: f32 = 1.0;
+    var r: f32 = 0.0;
+    for (var i: i32 = 0; i < MANDELBULB_ITERATIONS; i++) {
+        r = length(z);
+
+        if (r > Bailout) {
+            break;
+        }
+
+        // convert to polar coordinates
+        var theta: f32 = acos(z.z / r);
+        var phi: f32 = atan2(z.y, z.x);
+        dr = pow(r, Power - 1.) * Power * dr + 1.;
+
+        // scale and rotate the point
+        var zr: f32 = pow(r, Power);
+        theta = theta*Power;
+        phi = phi*Power;
+
+        // convert back to cartesian coordinates
+        z = vec3(
+            sin(theta)*cos(phi),
+            sin(phi)*sin(theta),
+            cos(theta)
+        ) * zr;
+        z = z + pos;
+    }
+
+    var result: DeResult;
+    result.distance = 0.5 * log(r) * r / dr;
+    result.color = vec3(1.);
+    return result;
+}
+
 fn world_de(pos: vec3<f32>) -> DeResult {
     var npos = pos;
 
@@ -120,8 +162,12 @@ fn world_de(pos: vec3<f32>) -> DeResult {
     //     sphere_de(modulo_vec3(pos, 5.), 1.)
     // );
 
+    // f = de_min(f,
+    //     menger_sponge_de(npos, 1., 2)
+    // );
+
     f = de_min(f,
-        menger_sponge_de(npos, 1., 2)
+        mandelbulb_de(npos)
     );
 
     // f = de_min(f,
@@ -262,17 +308,17 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
     uv = (vec3(uv, 1.) * uv_transform).xy;
 
-    var angle = (3.14 / 4.) * 4.2;
+    var angle = (3.14 / 4.) * 4.5;
     var rot_mat =  mat3x3(
         cos(angle),  0.,  sin(angle),
         0.,          1.,  0.,
         -sin(angle), 0.,  cos(angle),
     );
 
-    var ray_direction = normalize(vec3(uv, 1.));
+    var ray_direction = normalize(vec3(uv, 2.4));
     ray_direction *= rot_mat;
 
-    var cam_pos = vec3(0., 0., -2.3);
+    var cam_pos = vec3(0., 0., -3.);
     cam_pos *= rot_mat;
 
     return vec4(cast_bouncing_ray(cam_pos, ray_direction), 1.);
