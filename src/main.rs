@@ -13,7 +13,7 @@ pub struct SectionInfo {
 
 async fn run() {
     let mut si = SectionInfo {
-        size: 2u32.pow(11),
+        size: 2u32.pow(10),
         subdivisions: 4,
         subdiv_pos: (0, 0),
     };
