@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct Manifest {
-    max_level: u32,
+    available_levels: Vec<u32>,
 }
 
 pub struct FormattedBigImage {
@@ -27,8 +27,12 @@ impl FormattedBigImage {
         }
     }
 
-    pub fn max_level(&self)  -> u32 {
-        self.manifest.max_level
+    pub fn is_level_available(&self, level: u32) -> bool {
+        self.manifest.available_levels.contains(&level)
+    }
+
+    pub fn max_level_available(&self) -> Option<u32> {
+        self.manifest.available_levels.iter().copied().max()
     }
 
     pub async fn load(&self, level: u32, x: u32, y: u32) -> Option<image::RgbaImage> {

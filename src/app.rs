@@ -226,7 +226,7 @@ impl BigImageApp {
                 multiview: None,
             });
 
-        let mut this = Self {
+        let this = Self {
             image: Arc::new(image),
 
             window,
@@ -455,7 +455,7 @@ impl BigImageApp {
             subdivis *= 2;
             height_pixel_density *= 2.;
         }
-        subdivis = Ord::min(subdivis, self.image.max_level());
+        subdivis = Ord::min(subdivis, self.image.max_level_available().unwrap_or(1));
 
         let screen_top =    self.camera_y + 1. / self.camera_zoom;
         let screen_bottom = self.camera_y - 1. / self.camera_zoom;
@@ -464,6 +464,8 @@ impl BigImageApp {
 
         let mut s = 1u32;
         while s <= subdivis {
+            if !self.image.is_level_available(s) { s *= 2; continue };
+
             for sx in 0..s {
                 for sy in 0..s {
                     let size = 2. / s as f32;
@@ -486,6 +488,7 @@ impl BigImageApp {
                     }
                 }
             }
+
             s *= 2;
         }
 
