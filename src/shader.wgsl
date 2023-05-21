@@ -101,16 +101,24 @@ const MANDELBULB_ITERATIONS: i32 = 50; // Increase to increase the fractal preci
 const MANDELBULB_POWER: f32 = 8.;
 
 fn mandelbulb_de(pos: vec3<f32>) -> DeResult {
-    let Bailout: f32 = 1.15;
+    let Bailout: f32 = 2.;
     let Power: f32 = MANDELBULB_POWER;
 
     var z: vec3<f32> = pos;
     var dr: f32 = 1.0;
     var r: f32 = 0.0;
+
+    var result: DeResult;
+    result.color = vec3(1.);
+
     for (var i: i32 = 0; i < MANDELBULB_ITERATIONS; i++) {
         r = length(z);
 
         if (r > Bailout) {
+            let x = clamp(f32(i) / 23., 0., 1.);
+            result.color =
+                (vec3(1., 0., 0.) * x)        +
+                (vec3(1., 1., 1.) * (1. - x));
             break;
         }
 
@@ -133,9 +141,7 @@ fn mandelbulb_de(pos: vec3<f32>) -> DeResult {
         z = z + pos;
     }
 
-    var result: DeResult;
     result.distance = 0.5 * log(r) * r / dr;
-    result.color = vec3(1.);
     return result;
 }
 
