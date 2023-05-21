@@ -10,6 +10,7 @@ const STEPS_BLACK: f32 = 500.;
 struct SurfaceMaterial {
     color: vec3<f32>,
     reflexion_strength: f32,
+    diffuse_strength: f32,
 }
 
 struct DeResult {
@@ -21,6 +22,7 @@ fn new_surface_material() -> SurfaceMaterial {
     var d: SurfaceMaterial;
     d.color = vec3(1.);
     d.reflexion_strength = 0.;
+    d.diffuse_strength = 1.;
     return d;
 }
 
@@ -47,6 +49,12 @@ fn de_max(a: DeResult, b: DeResult) -> DeResult {
         return a;
     }
     return b;
+}
+
+fn de_with_material(a: DeResult, mat: SurfaceMaterial) -> DeResult {
+    var na = a;
+    na.material = mat;
+    return na;
 }
 
 fn modulo(a: f32, b: f32) -> f32 {
@@ -185,9 +193,13 @@ fn world_de(pos: vec3<f32>) -> DeResult {
         mandelbulb_de(npos)
     );
 
-    // f = de_min(f,
-    //     sphere_de(npos, 1.2)
-    // );
+    var m = new_surface_material();
+    m.reflexion_strength = 0.9;
+    m.diffuse_strength = 0.;
+
+    f = de_min(f,
+        de_with_material(sphere_de(npos + vec3(0., 0., -1.4), 0.2), m)
+    );
 
     // return box_de(npos, vec3(1.));
     // return menger_cross_de(npos, 1., 1.);
@@ -265,12 +277,14 @@ fn shaded_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
     // let LIGHT_POSITION = vec3(0., 3., 0.);
     let light_direction = normalize(vec3(0.2, 1., 1.));
 
-    let hit_light = cast_ray(rs.point + light_direction * HIT_DISTANCE, light_direction);
-    var diffuse_intensity: f32 = 0.2;
-    if (!hit_light.hit) {
-        diffuse_intensity = clamp(dot(rs.normal, light_direction), 0.2, 1.);
+    if (rs.material.diffuse_strength > 0.) {
+        let hit_light = cast_ray(rs.point + light_direction * HIT_DISTANCE, light_direction);
+        var diffuse_intensity: f32 = 0.2;
+        if (!hit_light.hit) {
+            diffuse_intensity = clamp(dot(rs.normal, light_direction), 0.2, 1.);
+        }
+        rs.material.color *= 1. * (1. - rs.material.diffuse_strength) + diffuse_intensity * rs.material.diffuse_strength;
     }
-    rs.material.color *= diffuse_intensity;
 
     return rs;
 }
@@ -346,17 +360,18 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
     uv = (vec3(uv, 1.) * uv_transform).xy;
 
-    var angle = (3.14 / 4.) * 4.5;
+    var angle = (3.14 / 4.) * 5.4;
+    // angle = (3.14 / 4.) * 4.5;
     var rot_mat =  mat3x3(
         cos(angle),  0.,  sin(angle),
         0.,          1.,  0.,
         -sin(angle), 0.,  cos(angle),
     );
 
-    var ray_direction = normalize(vec3(uv, 2.4));
+    var ray_direction = normalize(vec3(uv, 4.));
     ray_direction *= rot_mat;
 
-    var cam_pos = vec3(0., 0., -3.);
+    var cam_pos = vec3(1.0, 0., -3.);
     cam_pos *= rot_mat;
 
     return vec4(cast_bouncing_ray(cam_pos, ray_direction), 1.);
