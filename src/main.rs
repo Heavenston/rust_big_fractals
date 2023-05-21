@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use big_image_viewer::app;
 
 fn main() {

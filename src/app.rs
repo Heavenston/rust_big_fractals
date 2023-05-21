@@ -14,10 +14,12 @@ use winit::{
     window::{WindowBuilder, Window},
 };
 
+use crate::format::FormattedBigImage;
+
 const IMAGE_SECTION_SIZE: u32 = 2048;
 
 pub async fn start_app() {
-    BigImageApp::new().await
+    BigImageApp::new(FormattedBigImage::load_folder("images").await).await
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -39,8 +41,9 @@ struct ImageSection {
     pub position: SectionPosition,
 }
 
-#[allow(dead_code)]
 struct BigImageApp {
+    image: Arc<FormattedBigImage>,
+
     window: Window,
 
     surface_config: wgpu::SurfaceConfiguration,
@@ -70,7 +73,7 @@ struct BigImageApp {
 }
 
 impl BigImageApp {
-    pub async fn new() {
+    pub async fn new(image: FormattedBigImage) {
         let event_loop = EventLoop::new();
         let window = WindowBuilder::new().build(&event_loop).unwrap();
 
@@ -223,6 +226,8 @@ impl BigImageApp {
             });
 
         let mut this = Self {
+            image: Arc::new(image),
+
             window,
 
             surface_config,
@@ -249,30 +254,20 @@ impl BigImageApp {
             just_pressed_keys: HashSet::default(),
         };
 
-        let subs = 4;
-        for cx in 0..subs {
-            for cy in 0..subs {
-                this.image_sections.push(this.latent_image_load(
-                    SectionPosition {
-                        subdivisions: subs,
-                        pos: (cx, cy),
-                    },
-                    || {
-                        let i = image::open("image.png").unwrap();
-                        let ni = image::imageops::resize(
-                            &i, IMAGE_SECTION_SIZE, IMAGE_SECTION_SIZE,
-                            image::imageops::Lanczos3
-                        );
-                        ni
-                    }
-                ));
-            }
-        }
-
         this.start(event_loop);
     }
 
-    fn latent_image_load(
+    fn create_section(&mut self, pos: SectionPosition) {
+        let image = Arc::clone(&self.image);
+        let is = self.create_raw_section_lazy(pos, move || {
+            let i = tokio::runtime::Builder::new_current_thread().build().unwrap()
+                .block_on(image.load(pos.subdivisions, pos.pos.0, pos.pos.1));
+            i.unwrap()
+        });
+        self.image_sections.push(is);
+    }
+
+    fn create_raw_section_lazy(
         &self,
         position: SectionPosition,
         f: impl FnOnce() -> image::RgbaImage + Send + Sync + 'static
@@ -292,10 +287,10 @@ impl BigImageApp {
         });
 
         let t_image = image::RgbaImage::new(IMAGE_SECTION_SIZE, IMAGE_SECTION_SIZE);
-        self.create_image_section(position, t_image, loading_image)
+        self.create_raw_section(position, t_image, loading_image)
     }
 
-    fn create_image_section(
+    fn create_raw_section(
         &self,
         position: SectionPosition,
         image: image::RgbaImage,
@@ -389,7 +384,7 @@ impl BigImageApp {
         let x = (size.height as f32) / (size.width as f32);
         self.queue.write_buffer(&self.viewport_transform_buffer, 0,
             bytemuck::bytes_of::<[f32; 12]>(&[
-                x * self.camera_zoom  , 0.              , -self.camera_x * self.camera_zoom,    /* PADDING */ 0.,
+                x * self.camera_zoom  , 0.              , -self.camera_x * x * self.camera_zoom,    /* PADDING */ 0.,
                 0.                    , self.camera_zoom, -self.camera_y * self.camera_zoom,    /* PADDING */ 0.,
                 0.                    , 0.              , 1.                               ,    /* PADDING */ 0.,
             ])
@@ -449,6 +444,46 @@ impl BigImageApp {
                     }
                 );
             }
+        }
+
+        let mut height_pixel_density = IMAGE_SECTION_SIZE as f32 / (self.window.inner_size().height as f32 * self.camera_zoom);
+        let mut subdivis = 1u32;
+        while height_pixel_density < 0.8 {
+            subdivis *= 2;
+            height_pixel_density *= 2.;
+        }
+        subdivis = Ord::min(subdivis, self.image.max_level());
+
+        let screen_top =    self.camera_y + 1. / self.camera_zoom;
+        let screen_bottom = self.camera_y - 1. / self.camera_zoom;
+        let screen_left =   self.camera_x - 1. / self.camera_zoom;
+        let screen_right =  self.camera_x + 1. / self.camera_zoom;
+
+        let mut s = 1u32;
+        while s <= subdivis {
+            for sx in 0..s {
+                for sy in 0..s {
+                    let size = 2. / s as f32;
+                    let s_top    =  1. - size * sy as f32;
+                    let s_bottom =  s_top - size;
+                    let s_right  =  1. - size * (subdivis - sx - 1) as f32;
+                    let s_left   =  s_right - size;
+
+                    let touch = s_left < screen_right && s_right > screen_left &&
+                                s_top > screen_bottom && s_bottom < screen_top;
+                    if touch {
+                        let present = self.image_sections.iter()
+                            .map(|is| is.position).any(|p| p.subdivisions == s && p.pos.0 == sx && p.pos.1 == sy);
+                        if !present {
+                            println!("Create {s}_{sx}x{sy}");
+                            self.create_section(SectionPosition {
+                                subdivisions: s, pos: (sx, sy)
+                            });
+                        }
+                    }
+                }
+            }
+            s *= 2;
         }
 
         self.just_pressed_keys.clear();
