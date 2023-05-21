@@ -2,7 +2,7 @@ const SSAA: u32 = 1u;
 
 const MARCH_MAX_STEPS: i32 = 10000;
 const MAX_DISTANCE: f32 = 100000000.0;
-const HIT_DISTANCE: f32 = 0.00005;
+const HIT_DISTANCE: f32 = 0.000025;
 
 const STEPS_WHITE: f32 = 0.;
 const STEPS_BLACK: f32 = 500.;
@@ -217,7 +217,7 @@ fn world_de(pos: vec3<f32>) -> DeResult {
 }
 
 fn get_normal(pos: vec3<f32>) -> vec3<f32> {
-    let small_step = 0.000001;
+    let small_step = HIT_DISTANCE / 2.;
     let small_step_x = vec3(1., 0., 0.) * small_step;
     let small_step_y = vec3(0., 1., 0.) * small_step;
     let small_step_z = vec3(0., 0., 1.) * small_step;
@@ -279,7 +279,7 @@ fn shaded_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
     let light_direction = normalize(vec3(0.2, 1., 1.));
 
     if (rs.material.diffuse_strength > 0.) {
-        let hit_light = cast_ray(rs.point + light_direction * HIT_DISTANCE, light_direction);
+        let hit_light = cast_ray(rs.point + rs.normal * HIT_DISTANCE, light_direction);
         var diffuse_intensity: f32 = 0.2;
         if (!hit_light.hit) {
             diffuse_intensity = clamp(dot(rs.normal, light_direction), 0.2, 1.);
