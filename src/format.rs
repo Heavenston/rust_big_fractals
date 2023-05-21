@@ -32,7 +32,7 @@ impl FormattedBigImage {
     }
 
     pub async fn load(&self, level: u32, x: u32, y: u32) -> Option<image::RgbaImage> {
-        image::open(self.folder.join(&format!("{level}_{x}x{y}.png"))).ok()
+        image::open(self.folder.join(&format!("{level}_{x}x{}.png", level - y - 1))).ok()
             .map(|x| x.to_rgba8())
     }
 }

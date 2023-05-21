@@ -31,6 +31,7 @@ struct SectionPosition {
 #[derive(Debug)]
 struct ImageSection {
     pub loading_image: Arc<(AtomicBool, Mutex<Option<image::RgbaImage>>)>,
+    pub hide: bool,
 
     pub image: image::RgbaImage,
     pub bind_group: wgpu::BindGroup,
@@ -368,6 +369,7 @@ impl BigImageApp {
 
         ImageSection {
             loading_image,
+            hide: true,
             
             image,
             bind_group,
@@ -419,6 +421,7 @@ impl BigImageApp {
             if is.loading_image.0.load(std::sync::atomic::Ordering::Relaxed) {
                 is.loading_image.0
                     .store(false, std::sync::atomic::Ordering::Relaxed);
+                is.hide = false;
                 let ni = is.loading_image.1.lock().unwrap().take().unwrap();
                 self.queue.write_texture(
                     wgpu::ImageCopyTexture {
@@ -596,6 +599,7 @@ impl BigImageApp {
             rpass.set_pipeline(&self.render_pipeline);
             rpass.set_bind_group(0, &self.viewport_bind_group, &[]);
             for is in self.image_sections.iter() {
+                if is.hide { continue }
                 rpass.set_bind_group(1, &is.bind_group, &[]);
                 rpass.draw(0..6, 0..1);
             }
