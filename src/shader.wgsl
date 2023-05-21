@@ -59,5 +59,5 @@ fn vertex_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
 
 @fragment
 fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4(v.uv, 0., 1.);
+    return textureSample(txture, splr, v.uv);
 }

@@ -125,6 +125,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "image",
+ "rayon",
  "tokio",
  "wgpu",
  "winit",

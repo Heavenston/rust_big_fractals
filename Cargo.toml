@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 bytemuck = "1.13.1"
 image = "0.24.6"
+rayon = "1.7.0"
 tokio = { version = "1.28.1", features = ["rt"] }
 wgpu = "0.16.0"
 winit = "0.28.6"

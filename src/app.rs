@@ -1,11 +1,16 @@
 
-use std::{borrow::Cow, time::{Duration, Instant}, collections::HashSet};
+use std::{
+    borrow::Cow,
+    time::{Duration, Instant},
+    collections::HashSet,
+    sync::{Arc, Mutex, atomic::AtomicBool}
+};
 
 use image::EncodableLayout;
 use wgpu::util::DeviceExt;
 use winit::{
     event::{Event, WindowEvent, ElementState, VirtualKeyCode, MouseScrollDelta},
-    event_loop::EventLoop,
+    event_loop::{EventLoop, ControlFlow},
     window::{WindowBuilder, Window},
 };
 
@@ -17,6 +22,8 @@ pub async fn start_app() {
 
 #[derive(Debug)]
 struct ImageSection {
+    loading_image: Arc<(AtomicBool, Mutex<Option<image::RgbaImage>>)>,
+
     image: image::RgbaImage,
     bind_group: wgpu::BindGroup,
     texture: wgpu::Texture,
@@ -235,13 +242,46 @@ impl BigImageApp {
         };
 
         this.image_sections.push(
-            this.create_image_section(image::RgbaImage::new(500, 500))
+            this.latent_image_load(|| {
+                let i = image::open("image.png").unwrap();
+                let ni = image::imageops::resize(
+                    &i, IMAGE_SECTION_SIZE, IMAGE_SECTION_SIZE,
+                    image::imageops::Gaussian
+                );
+                ni
+            })
         );
 
         this.start(event_loop);
     }
 
-    fn create_image_section(&self, image: image::RgbaImage) -> ImageSection {
+    fn latent_image_load(
+        &self,
+        f: impl FnOnce() -> image::RgbaImage + Send + Sync + 'static
+    ) -> ImageSection {
+        let loading_image: Arc<(AtomicBool, Mutex<Option<image::RgbaImage>>)>
+            = Default::default();
+
+        rayon::spawn({
+            let loading_image = Arc::clone(&loading_image);
+            move || {
+                let i = f();
+                *loading_image.1.lock().unwrap() = Some(i);
+                loading_image.0.store(
+                    true, std::sync::atomic::Ordering::Relaxed
+                );
+            }
+        });
+
+        let t_image = image::RgbaImage::new(IMAGE_SECTION_SIZE, IMAGE_SECTION_SIZE);
+        self.create_image_section(t_image, loading_image)
+    }
+
+    fn create_image_section(
+        &self,
+        image: image::RgbaImage,
+        loading_image: Arc<(AtomicBool, Mutex<Option<image::RgbaImage>>)>,
+    ) -> ImageSection {
         let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
             label: None,
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -307,6 +347,8 @@ impl BigImageApp {
         });
 
         ImageSection {
+            loading_image,
+            
             image,
             bind_group,
             texture,
@@ -327,7 +369,7 @@ impl BigImageApp {
         );
     }
 
-    fn update(&mut self, elapsed: Duration) {
+    fn update(&mut self, control_flow: &mut ControlFlow, elapsed: Duration) {
         let dt = elapsed.as_secs_f32();
 
         let camera_move_speed = (dt * 4.) / self.camera_zoom;
@@ -346,6 +388,40 @@ impl BigImageApp {
             self.camera_x = 0.;
             self.camera_y = 0.;
             self.camera_zoom = 1.;
+        }
+        if self.just_pressed_keys.contains(&VirtualKeyCode::Q) {
+            control_flow.set_exit();
+        }
+
+        for is in self.image_sections.iter_mut() {
+            if is.loading_image.0.load(std::sync::atomic::Ordering::Relaxed) {
+                is.loading_image.0
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+                let ni = is.loading_image.1.lock().unwrap().take().unwrap();
+                self.queue.write_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: &is.texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d {
+                            x: 0,
+                            y: 0,
+                            z: 0,
+                        },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    ni.as_bytes(),
+                    wgpu::ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: Some(ni.width() * 4),
+                        rows_per_image: Some(ni.height() * 4),
+                    },
+                    wgpu::Extent3d {
+                        width: ni.width(),
+                        height: ni.height(),
+                        depth_or_array_layers: 1,
+                    }
+                );
+            }
         }
 
         self.just_pressed_keys.clear();
@@ -398,7 +474,7 @@ impl BigImageApp {
                 }
                 Event::WindowEvent {
                     event: WindowEvent::MouseWheel {
-                        device_id: _, delta, phase: _, modifiers: _
+                        delta, ..
                     },
                     ..
                 } => {
@@ -416,7 +492,7 @@ impl BigImageApp {
                     let elapsed_update = last_update.elapsed();
                     if elapsed_update > update_interval {
                         last_update = Instant::now();
-                        self.update(elapsed_update);
+                        self.update(control_flow, elapsed_update);
                     }
                 },
                 Event::RedrawRequested(_) => {
