@@ -3,8 +3,8 @@ pub mod utils;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct Manifest {
-    available_levels: Vec<u32>,
+pub struct Manifest {
+    pub available_levels: Vec<u32>,
 }
 
 pub struct FormattedBigImage {
@@ -37,7 +37,7 @@ impl FormattedBigImage {
     }
 
     pub async fn load(&self, level: u32, x: u32, y: u32) -> Option<image::RgbaImage> {
-        image::open(self.folder.join(&format!("{level}_{x}x{}.webp", level - y - 1))).ok()
+        image::open(self.folder.join(&format!("{level}_{x}x{y}.webp"))).ok()
             .map(|x| x.to_rgba8())
     }
 }

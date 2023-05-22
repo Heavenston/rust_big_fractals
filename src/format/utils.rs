@@ -1,5 +1,5 @@
 use image::GenericImage;
-use std::{path::Path, collections::{HashSet, HashMap}};
+use std::{path::Path, collections::{HashSet, HashMap}, sync::{Arc, Mutex}};
 
 pub async fn extrapolate_levels(path: impl AsRef<Path>) {
     let path = path.as_ref();
@@ -59,7 +59,7 @@ pub async fn extrapolate_levels(path: impl AsRef<Path>) {
                                 let nsy = sy * 2 + dy;
                                 println!("{sub_level}_{nsx}x{nsy}.webp");
                                 if let Ok(si) = image::open(path.join(&format!("{sub_level}_{nsx}x{nsy}.webp"))) {
-                                    reconstructed.copy_from(&si, 2048 * dx, 2048 * (1 - dy))
+                                    reconstructed.copy_from(&si, 2048 * dx, 2048 * dy)
                                         .unwrap();
                                 }
                             }
@@ -77,5 +77,11 @@ pub async fn extrapolate_levels(path: impl AsRef<Path>) {
             }
         });
     }
+
+    let manifest = crate::format::Manifest {
+        available_levels: (1..deepest_level.unwrap_or(0)).collect(),
+    };
+    let manifest_json = serde_json::to_string(&manifest).unwrap();
+    tokio::fs::write(path.join("manifest.json"), &manifest_json).await.unwrap();
 }
 
