@@ -1,59 +1,115 @@
 #![feature(int_roundings)]
 
-use std::{borrow::Cow, str::FromStr, time::Duration, path::Path, sync::Arc};
+use std::{borrow::Cow, str::FromStr, time::Duration, path::{Path, PathBuf}, sync::Arc};
 use wgpu::{util::DeviceExt, PowerPreference};
 use image::GenericImage;
+use anyhow::anyhow;
+
+use clap::{ value_parser, Parser };
+
+fn position_arg_parse(s: &str) -> anyhow::Result<(u32, u32)> {
+    let (a, b) = s.split_once('x').ok_or(anyhow!("Syntax is 'NUMxNUM'"))?;
+    Ok((a.parse()?, b.parse()?))
+}
+
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(required = true, index = 1, value_name = "shader")]
+    shader: PathBuf,
+    #[arg(long="out", short='o', value_name = "out_folder", default_value = ".")]
+    out_folder: PathBuf,
+    #[arg(long="format", short='p', value_name = "format", default_value = "bmp")]
+    format: String,
+
+    #[arg(long="size", default_value_t = 2048)]
+    size: u32,
+    #[arg(long="resize")]
+    resize: Option<u32>,
+    #[arg(
+        long="subdivides", short='s', default_value_t = 1,
+        value_parser = value_parser!(u32).range(1..)
+    )]
+    subdivisions: u32,
+
+    #[arg(long="from", short='f', value_parser = position_arg_parse, default_value = "0x0")]
+    from: (u32, u32),
+    #[arg(long="to", short='t', value_parser = position_arg_parse)]
+    to: Option<(u32, u32)>,
+
+    #[arg(long="debug", short='d')]
+    debug: bool,
+}
+
+#[tokio::main]
+async fn main() {
+    let args = Args::parse();
+    let to = args.to.unwrap_or((args.subdivisions - 1, args.subdivisions - 1));
+
+    env_logger::builder()
+        .filter(None, log::LevelFilter::Warn)
+        .filter_module(
+            "fractals",
+            if args.debug
+            { log::LevelFilter::Trace }
+            else
+            { log::LevelFilter::Info }
+        )
+        .init();
+
+    log::info!("Using render size:  {:?}", args.size);
+    log::info!("Using resuze size:  {:?}", args.resize);
+    log::info!("Using subdivisions: {:?}", args.subdivisions);
+    log::info!(
+        "Rendering sections: {}x{} to {}x{}",
+        args.from.0, args.from.1, to.0, to.1
+    );
+    log::info!("Using shader:       {:?}", args.shader);
+    log::info!("Using output folder:{:?}", args.out_folder);
+
+    log::debug!("Creating renderer");
+    let renderer = Renderer::new(args.size, args.shader).await;
+    log::debug!("Created");
+
+    std::fs::create_dir_all(&args.out_folder).unwrap();
+
+    let mut set = tokio::task::JoinSet::new();
+
+    let resize = args.resize;
+    let subdivisions = args.subdivisions;
+    for sx in args.from.0..=to.0 {
+        for sy in args.from.1..=to.1 {
+            log::info!("Rendering {sx}x{sy}...");
+            let s1 = renderer.render_section(SectionInfo {
+                subdivisions: args.subdivisions,
+                subdiv_pos: (sx, sy),
+            }).await;
+            let out_folder = args.out_folder.clone();
+            let format = args.format.clone();
+            set.spawn_blocking(move || {
+                let ns1 =
+                    if let Some(ns) = resize {
+                        log::debug!("Resizing {sx}x{sy}...");
+                        image::imageops::resize(&s1, ns, ns, image::imageops::FilterType::Lanczos3)
+                    } else { s1 };
+                log::debug!("Saving {sx}x{sy}...");
+                ns1.save(
+                    out_folder.join(&format!("{subdivisions}_{sx}x{sy}.{format}"))
+                ).unwrap();
+            });
+        }
+    }
+
+    while let Some(x) = set.join_next().await {
+        x.unwrap();
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct SectionInfo {
     subdivisions: u32,
     subdiv_pos: (u32, u32),
-}
-
-async fn run() {
-    // let mut si = SectionInfo {
-    //     size: 2u32.pow(10),
-    //     subdivisions: 4,
-    //     subdiv_pos: (0, 0),
-    // };
-
-    // let mut total_image = image::RgbaImage::new(
-    //     si.size * si.subdivisions, si.size * si.subdivisions
-    // );
-    // println!("Total image is of size {:?}", total_image.dimensions());
-
-    // for sx in 0..si.subdivisions {
-    //     for sy in 0..si.subdivisions {
-    //         si.subdiv_pos = (sx, sy);
-    //         log::info!("Rendering si {si:?}");
-    //         let output = execute_gpu(si).await.unwrap();
-    //         let image = image::RgbaImage::from_raw(si.size, si.size, output)
-    //             .unwrap();
-
-    //         log::info!("Saving image...");
-    //         // image.save(&format!("image_{sx}x{sy}.bmp")).unwrap();
-    //         log::info!("Copying to aggregate image");
-    //         total_image.copy_from(
-    //             &image,
-    //             si.size * sx,
-    //             si.size * (si.subdivisions - sy - 1)
-    //         ).unwrap();
-    //     }
-    // }
-
-    // log::info!("Resizing image...");
-    // let total_image = image::imageops::resize(&total_image, 2048, 2048, image::imageops::FilterType::Gaussian);
-    // log::info!("Saving Aggregate...");
-    // total_image.save("image.png").unwrap();
-    // log::info!("Finished !");
-}
-
-#[tokio::main]
-async fn main() {
-    env_logger::builder()
-        .filter(None, log::LevelFilter::Warn)
-        .filter_module("fractals", log::LevelFilter::Trace)
-        .init();
 }
 
 struct Renderer {
@@ -85,12 +141,15 @@ impl Renderer {
             })
             .await.unwrap();
 
+        log::info!("Using adapter:      {:?}", adapter.get_info().name);
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
                     features: wgpu::Features::empty(),
                     limits: wgpu::Limits {
+                        max_texture_dimension_2d: size,
                         ..wgpu::Limits::downlevel_defaults()
                     },
                 },
@@ -182,7 +241,7 @@ impl Renderer {
         let uv_scale = 1. / (section.subdivisions as f32);
         let uv_span = 1. - 1. / (section.subdivisions as f32);
         let uv_x = section.subdiv_pos.0 as f32;
-        let uv_y = section.subdiv_pos.1 as f32;
+        let uv_y = (section.subdivisions - section.subdiv_pos.1 - 1) as f32;
 
         let uv_transform_buffer = self.device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -273,6 +332,8 @@ impl Renderer {
         let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
 
+        log::debug!("Waiting for render to finish...");
+
         tokio::task::block_in_place(move || {
             self.device.poll(
                 wgpu::Maintain::WaitForSubmissionIndex(submition_id)
@@ -280,7 +341,6 @@ impl Renderer {
         });
 
         if let Some(Ok(())) = receiver.receive().await {
-            log::info!("Render finish, reading image...");
             let data = buffer_slice.get_mapped_range();
             let result = data.to_vec();
 
