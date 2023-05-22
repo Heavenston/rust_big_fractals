@@ -1,5 +1,6 @@
 #![feature(int_roundings)]
-mod renderer;
+pub mod shader_prep;
+pub mod renderer;
 use renderer::*;
 
 use std::path::PathBuf;
@@ -96,6 +97,7 @@ async fn main() {
                 ns1.save(
                     out_folder.join(&format!("{subdivisions}_{sx}x{sy}.{format}"))
                 ).unwrap();
+                log::debug!("Finished {sx}x{sy}");
             });
         }
     }

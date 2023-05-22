@@ -54,7 +54,8 @@ impl Renderer {
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                &std::fs::read_to_string(shader.as_ref()).unwrap()
+                &crate::shader_prep::preproces_file(shader.as_ref()).await
+                    .expect("Could not read shader file")
             )),
         });
 
