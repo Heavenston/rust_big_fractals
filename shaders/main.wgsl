@@ -1,11 +1,12 @@
-const SSAA: u32 = 1u;
+#default MARCH_MAX_STEPS 100
+#default MAX_DISTANCE 10000.0
+#default HIT_DISTANCE 0.001
 
-const MARCH_MAX_STEPS: i32 = 10000;
-const MAX_DISTANCE: f32 = 100000000.0;
-const HIT_DISTANCE: f32 = 0.000025;
+#default STEPS_WHITE 0.
+#default STEPS_BLACK 100.
 
-const STEPS_WHITE: f32 = 0.;
-const STEPS_BLACK: f32 = 500.;
+#default CAMERA_POSITION vec3(0., 0., -3.)
+#default CAMERA_ROTATION vec3(0., 0., 0.)
 
 struct SurfaceMaterial {
     color: vec3<f32>,
@@ -79,142 +80,6 @@ fn sphere_de(pos: vec3<f32>, radius: f32) -> DeResult {
     return result;
 }
 
-fn menger_cross_de(point: vec3<f32>, size: f32, extent: f32) -> DeResult {
-    return de_min(
-        box_de(point, vec3(size, extent, size)), de_min(
-        box_de(point, vec3(extent, size, size)),
-        box_de(point, vec3(size, size, extent))
-    ));
-}
-
-fn menger_sponge_de(point: vec3<f32>, side: f32, iterations: i32) -> DeResult {
-    var distance: f32 = box_de(point, vec3(side)).distance;
-
-    var factor = 1.;
-    var cross_middle = point;
-
-    for (var i = 0; i < 6; i += 1) {
-        factor /= 3.;
-
-        var mpoint: vec3<f32> = vec3(
-            modulo(point.x + side * factor, side * factor * 6.) - side * factor,
-            modulo(point.y + side * factor, side * factor * 6.) - side * factor,
-            modulo(point.z + side * factor, side * factor * 6.) - side * factor,
-        );
-        var cross = menger_cross_de(mpoint, side * factor, 100.).distance;
-        distance = max(
-            distance,
-            -cross
-        );
-
-        cross_middle += vec3(side, 0., 0.) * factor * 2.;
-    }
-
-    var result: DeResult = new_de_result();
-    result.distance = distance;
-    return result;
-}
-
-const MANDELBULB_ITERATIONS: i32 = 50; // Increase to increase the fractal precision
-const MANDELBULB_POWER: f32 = 8.;
-
-fn mandelbulb_de(pos: vec3<f32>) -> DeResult {
-    let Bailout: f32 = 2.;
-    let Power: f32 = MANDELBULB_POWER;
-
-    var z: vec3<f32> = pos;
-    var dr: f32 = 1.0;
-    var r: f32 = 0.0;
-
-    var material: SurfaceMaterial = new_surface_material();
-    for (var i: i32 = 0; i < MANDELBULB_ITERATIONS; i++) {
-        r = length(z);
-
-        if (r > Bailout) {
-            let x = clamp(
-                f32(max(0, i + -4)) / 15.,
-                0.,
-                1.
-            );
-            material.color =
-                (vec3(1., 0., 0.) * x)        +
-                (vec3(1., 1., 1.) * (1. - x));
-            break;
-        }
-
-        // convert to polar coordinates
-        var theta: f32 = acos(z.z / r);
-        var phi: f32 = atan2(z.y, z.x);
-        dr = pow(r, Power - 1.) * Power * dr + 1.;
-
-        // scale and rotate the point
-        var zr: f32 = pow(r, Power);
-        theta = theta*Power;
-        phi = phi*Power;
-
-        // convert back to cartesian coordinates
-        z = vec3(
-            sin(theta)*cos(phi),
-            sin(phi)*sin(theta),
-            cos(theta)
-        ) * zr;
-        z = z + pos;
-    }
-
-    var result = new_de_result();
-    result.material = material;
-    result.distance = 0.5 * log(r) * r / dr;
-    return result;
-}
-
-fn world_de(pos: vec3<f32>) -> DeResult {
-    var npos = pos;
-
-    var f: DeResult = new_de_result();
-
-    // f = de_min(f, de_max(
-    //     box_de(npos - vec3(1., 0., 0.), vec3(1.)),
-    //     sphere_de(npos - vec3(1., 0., 0.), 1.4)
-    // ));
-    // f = de_min(f, de_color(
-    //     box_de(npos + vec3(1., -0.4, 0.), vec3(0.2)),
-    //     vec3(1., 0., 0.)
-    // ));
-    // f = de_min(f, de_color(
-    //     box_de(npos + vec3(1., 0.4, 0.), vec3(0.2)),
-    //     vec3(0., 1., 0.)
-    // ));
-
-    // f = de_min(f,
-    //     sphere_de(modulo_vec3(pos, 5.), 1.)
-    // );
-
-    // f = de_min(f,
-    //     menger_sponge_de(npos, 1., 2)
-    // );
-
-    var m = new_surface_material();
-    m.reflexion_strength = 0.;
-    m.diffuse_strength = 0.5;
-
-    f = de_min(f,
-        mandelbulb_de(npos)
-    );
-
-    f = de_min(f,
-        sphere_de(npos + vec3(0., 0., -1.4), 0.2)
-    );
-
-    // return box_de(npos, vec3(1.));
-    // return menger_cross_de(npos, 1., 1.);
-    // return sphere_de(npos, 1.2);
-    // return de_min(
-    //     sphere_de(npos + vec3(0., 0.5, 0.), 1.),
-    //     sphere_de(npos - vec3(0., 0.5, 0.), 1.),
-    // );
-
-    return f;
-}
 
 fn get_normal(pos: vec3<f32>) -> vec3<f32> {
     let small_step = HIT_DISTANCE / 2.;
@@ -364,18 +229,17 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var uv: vec2<f32> = v.tex_coord * 2. - vec2(1.);
     uv = (vec3(uv, 1.) * uv_transform).xy;
 
-    var angle = (3.14 / 4.) * 11.5;
-    // angle = (3.14 / 4.) * 4.5;
+    var y_angle = CAMERA_ROTATION.y;
     var rot_mat =  mat3x3(
-        cos(angle),  0.,  sin(angle),
+        cos(y_angle),  0.,  sin(y_angle),
         0.,          1.,  0.,
-        -sin(angle), 0.,  cos(angle),
+        -sin(y_angle), 0.,  cos(y_angle),
     );
 
     var ray_direction = normalize(vec3(uv, 2.));
     ray_direction *= rot_mat;
 
-    var cam_pos = vec3(0.0, 0., -3.);
+    var cam_pos = CAMERA_POSITION;
     cam_pos *= rot_mat;
 
     return vec4(cast_bouncing_ray(cam_pos, ray_direction), 1.);
