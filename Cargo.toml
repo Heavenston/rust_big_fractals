@@ -12,6 +12,6 @@ env_logger = "0.10.0"
 futures-intrusive = "0.5.0"
 image = "0.24.6"
 log = { version = "0.4.17", features = ["std", "serde"] }
-pollster = "0.3.0"
 serde = { version = "1.0.163", features = ["derive"] }
+tokio = { version = "1.28.1", features = ["fs", "rt", "rt-multi-thread", "macros"] }
 wgpu = "0.16.0"
