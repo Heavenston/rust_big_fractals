@@ -457,6 +457,10 @@ impl BigImageApp {
         }
         subdivis = Ord::min(subdivis, self.image.max_level_available().unwrap_or(1));
 
+        self.image_sections.drain_filter(|x| {
+            x.position.subdivisions > subdivis
+        }).for_each(|_| ());
+
         let screen_top =    self.camera_y + 1. / self.camera_zoom;
         let screen_bottom = self.camera_y - 1. / self.camera_zoom;
         let screen_left =   self.camera_x - 1. / self.camera_zoom;
@@ -601,6 +605,7 @@ impl BigImageApp {
             });
             rpass.set_pipeline(&self.render_pipeline);
             rpass.set_bind_group(0, &self.viewport_bind_group, &[]);
+            self.image_sections.sort_unstable_by_key(|p| p.position.subdivisions);
             for is in self.image_sections.iter() {
                 if is.hide { continue }
                 rpass.set_bind_group(1, &is.bind_group, &[]);

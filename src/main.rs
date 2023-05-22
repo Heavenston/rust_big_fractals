@@ -1,3 +1,4 @@
+#![feature(drain_filter)]
 #![allow(dead_code)]
 use big_image_viewer::*;
 
