@@ -46,8 +46,20 @@ impl FormattedBigImage {
             .replace("%X%", &x.to_string())
             .replace("%Y%", &y.to_string())
             .replace("%FORMAT%", &self.manifest.format);
-        tokio::process::Command::new("sh")
-            .arg("-c")
+        #[cfg(target_os = "linux")]
+        let mut c = {
+            let mut c = tokio::process::Command::new("sh");
+            c.arg("-c");
+            c
+        };
+        #[cfg(target_os = "windows")]
+        let mut c = {
+            let mut c = tokio::process::Command::new("powershell.exe");
+            c.arg("-Command");
+            c
+        };
+
+        c
             .arg(command)
             .stdout(Stdio::null())
             .current_dir(&self.folder)
