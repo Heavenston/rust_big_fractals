@@ -3,7 +3,7 @@ use std::{
     borrow::Cow,
     time::{Duration, Instant},
     collections::HashSet,
-    sync::{Arc, Mutex, atomic::AtomicBool}
+    sync::{Arc, Mutex, atomic::AtomicBool}, path::Path
 };
 
 use image::EncodableLayout;
@@ -18,8 +18,8 @@ use crate::format::FormattedBigImage;
 
 const IMAGE_SECTION_SIZE: u32 = 2048;
 
-pub async fn start_app() {
-    BigImageApp::new(FormattedBigImage::load_folder("images").await).await
+pub async fn start_app(folder: &Path) {
+    BigImageApp::new(FormattedBigImage::load_folder(folder).await).await
 }
 
 #[derive(Debug, Clone, Copy)]

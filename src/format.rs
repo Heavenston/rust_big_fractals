@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Manifest {
     pub available_levels: Vec<u32>,
+    pub format: String,
 }
 
 pub struct FormattedBigImage {
@@ -37,7 +38,7 @@ impl FormattedBigImage {
     }
 
     pub async fn load(&self, level: u32, x: u32, y: u32) -> Option<image::RgbaImage> {
-        image::open(self.folder.join(&format!("{level}_{x}x{y}.webp"))).ok()
+        image::open(self.folder.join(&format!("{level}_{x}x{y}.{}", self.manifest.format))).ok()
             .map(|x| x.to_rgba8())
     }
 }
