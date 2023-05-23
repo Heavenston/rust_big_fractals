@@ -1,23 +1,5 @@
-[package]
-name = "fractals"
-version = "0.1.0"
-edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-anyhow = "1.0.71"
-async-recursion = "1.0.4"
-bytemuck = "1.13.1"
-clap = { version = "4.3.0", features = ["derive"] }
-env_logger = "0.10.0"
-futures-intrusive = "0.5.0"
-image = { version = "0.24.6", features = ["webp-encoder"] }
-log = { version = "0.4.17", features = ["std", "serde"] }
-serde = { version = "1.0.163", features = ["derive"] }
-tokio = { version = "1.28.1", features = ["fs", "rt", "rt-multi-thread", "macros"] }
-wgpu = "0.16.0"
-
-[profile.release]
-debug = true
-debug-assertions = true
+[workspace]
+members = [
+  "renderer"
+]

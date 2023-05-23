@@ -12,21 +12,28 @@ fn position_arg_parse(s: &str) -> anyhow::Result<(u32, u32)> {
     Ok((a.parse()?, b.parse()?))
 }
 
-/// Simple program to greet a person
+/// Render fractals potentially in sections !
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    /// Path to the wgsl shader used for rendering
     #[arg(required = true, index = 1, value_name = "shader")]
     shader: PathBuf,
+    /// Path to the folder where to save the rendered images
     #[arg(long="out", short='o', value_name = "out_folder", default_value = ".")]
     out_folder: PathBuf,
+    /// Extension of the output images
     #[arg(long="format", short='p', value_name = "format", default_value = "bmp")]
     format: String,
 
+    /// Size of the rendered images
     #[arg(long="size", default_value_t = 2048)]
     size: u32,
+    /// If specified the images will be resized before being saved
     #[arg(long="resize")]
     resize: Option<u32>,
+    /// How many subdivisions on each dimensions should be renderer
+    /// (5 subdivisions means there will be 5x5=25 images total)
     #[arg(
         long="subdivides", short='s', default_value_t = 1,
         value_parser = value_parser!(u32).range(1..)
@@ -38,6 +45,7 @@ struct Args {
     #[arg(long="to", short='t', value_parser = position_arg_parse)]
     to: Option<(u32, u32)>,
 
+    /// Enable debug output
     #[arg(long="debug", short='d')]
     debug: bool,
 }
