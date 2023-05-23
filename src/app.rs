@@ -218,7 +218,7 @@ impl BigImageApp {
                     module: &shader_module,
                     entry_point: "fragment_main",
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                        format: swapchain_format,
                         blend: None,
                         write_mask: wgpu::ColorWrites::all(),
                     })],
