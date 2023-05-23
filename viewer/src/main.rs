@@ -45,7 +45,7 @@ async fn main() {
     env_logger::builder()
         .filter(None, log::LevelFilter::Warn)
         .filter_module(
-            "fractals",
+            "big_image_viewer",
             if args.debug
             { log::LevelFilter::Trace }
             else

@@ -87,6 +87,7 @@ pub async fn extrapolate_levels(
     let manifest = crate::format::Manifest {
         available_levels: (1..deepest_level.unwrap_or(0)).collect(),
         format: format.into(),
+        render_command: None,
     };
     let manifest_json = serde_json::to_string(&manifest).unwrap();
     tokio::fs::write(path.join("manifest.json"), &manifest_json).await.unwrap();

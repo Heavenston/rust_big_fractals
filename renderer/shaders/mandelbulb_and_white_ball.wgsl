@@ -1,9 +1,9 @@
 #define MARCH_MAX_STEPS 10000
 #define MAX_DISTANCE 100000000.0
-#define HIT_DISTANCE 0.000025
+#define HIT_DISTANCE 0.000001
 
 #define STEPS_WHITE 0.
-#define STEPS_BLACK 350.
+#define STEPS_BLACK 1000.
 
 #define CAMERA_POSITION vec3(0., 0., -3.)
 #define CAMERA_ROTATION vec3(0., (3.14 / 4.) * 11.5, 0.)

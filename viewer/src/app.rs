@@ -3,7 +3,7 @@ use std::{
     borrow::Cow,
     time::{Duration, Instant},
     collections::HashSet,
-    sync::{Arc, Mutex, atomic::AtomicBool}, path::Path
+    sync::{Arc, Mutex, atomic::AtomicBool}, path::Path, future::Future
 };
 
 use image::EncodableLayout;
@@ -260,26 +260,28 @@ impl BigImageApp {
 
     fn create_section(&mut self, pos: SectionPosition) {
         let image = Arc::clone(&self.image);
-        let is = self.create_raw_section_lazy(pos, move || {
-            let i = tokio::runtime::Builder::new_current_thread().build().unwrap()
-                .block_on(image.load(pos.subdivisions, pos.pos.0, pos.pos.1));
+        let is = self.create_raw_section_lazy(pos, move || { async move {
+            let i = image.load(pos.subdivisions, pos.pos.0, pos.pos.1).await;
             i.unwrap()
-        });
+        }});
         self.image_sections.push(is);
     }
 
-    fn create_raw_section_lazy(
+    fn create_raw_section_lazy<R, F>(
         &self,
         position: SectionPosition,
-        f: impl FnOnce() -> image::RgbaImage + Send + Sync + 'static
-    ) -> ImageSection {
+        f: R,
+    ) -> ImageSection
+        where R: FnOnce() -> F + Send + Sync + 'static,
+              F: Future<Output = image::RgbaImage> + Send + Sync + 'static
+    {
         let loading_image: Arc<(AtomicBool, Mutex<Option<image::RgbaImage>>)>
             = Default::default();
 
-        rayon::spawn({
+        tokio::spawn({
             let loading_image = Arc::clone(&loading_image);
-            move || {
-                let i = f();
+            async move {
+                let i = f().await;
                 *loading_image.1.lock().unwrap() = Some(i);
                 loading_image.0.store(
                     true, std::sync::atomic::Ordering::Relaxed
@@ -455,7 +457,10 @@ impl BigImageApp {
             subdivis *= 2;
             height_pixel_density *= 2.;
         }
-        subdivis = Ord::min(subdivis, self.image.max_level_available().unwrap_or(1));
+        subdivis = Ord::min(
+            subdivis,
+            self.image.max_level_available().unwrap_or(subdivis)
+        );
 
         self.image_sections.drain_filter(|x| {
             x.position.subdivisions > subdivis
