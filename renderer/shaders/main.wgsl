@@ -8,7 +8,7 @@
 //#default CAMERA_ROTATION vec3(0., 0., 0.)
 //#default CAMERA_FOCAL_LENGTH 1.0
 
-//#default ENABLE_SHADOWS false
+//#default ENABLE_SHADOWS true
 
 @group(0)
 @binding(0)
@@ -163,6 +163,8 @@ fn shaded_ray(config: RayCastConfig) -> RayCastResult {
     if (!rs.hit) { return rs; }
 
     let light_direction = normalize(vec3(0.2, 1., 1.));
+    let hit_distance =
+        config.hit_distance * config.hit_scaling * rs.distance;
 
     if (rs.material.diffuse_strength > 0.) {
         var should_light = true;
@@ -171,11 +173,11 @@ fn shaded_ray(config: RayCastConfig) -> RayCastResult {
         if (ENABLE_SHADOWS) {
             var light_hit_config = config;
             light_hit_config.origin =
-                rs.point + rs.normal * 0.01;
+                rs.point + rs.normal * hit_distance;
             light_hit_config.start_distance = rs.distance;
             light_hit_config.direction = light_direction;
             let hit_light = cast_ray(light_hit_config);
-            should_light = should_light && hit_light.hit;
+            should_light = should_light && !hit_light.hit;
         }
 
         var diffuse_intensity: f32 = 0.2;
