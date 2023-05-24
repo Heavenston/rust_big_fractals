@@ -288,8 +288,6 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     config.hit_distance = 1. / f32(screen_max_size);
     config.hit_scaling = 1. / CAMERA_FOCAL_LENGTH;
 
-    config.hit_scaling = 1.;
-
     return vec4(cast_bouncing_ray(config), 1.);
 }
 
