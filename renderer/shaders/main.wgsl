@@ -8,6 +8,8 @@
 //#default CAMERA_ROTATION vec3(0., 0., 0.)
 //#default CAMERA_FOCAL_LENGTH 1.0
 
+//#default LIGHT_DIRECTION normalize(vec3(0.2, 1., 1.))
+
 //#default ENABLE_SHADOWS true
 
 @group(0)
@@ -162,7 +164,7 @@ fn shaded_ray(config: RayCastConfig) -> RayCastResult {
     var rs = cast_ray(config);
     if (!rs.hit) { return rs; }
 
-    let light_direction = normalize(vec3(0.2, 1., 1.));
+    let light_direction = LIGHT_DIRECTION;
     let hit_distance =
         config.hit_distance * config.hit_scaling * rs.distance;
 

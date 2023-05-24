@@ -8,6 +8,9 @@
 //#define CAMERA_ROTATION vec3(0., (3.14 / 4.) * 11.5, 0.)
 //#define CAMERA_FOCAL_LENGTH 2.5
 
+//#define LIGHT_DIRECTION normalize(vec3(0.2, 1., 1.))
+//#define ENABLE_SHADOWS true
+
 //#include "main.wgsl"
 
 fn menger_cross_de(point: vec3<f32>, size: f32, extent: f32) -> DeResult {
