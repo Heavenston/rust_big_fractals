@@ -1,12 +1,22 @@
-#default MARCH_MAX_STEPS 100
-#default MAX_DISTANCE 10000.0
-#default HIT_DISTANCE 0.001
+//#default MARCH_MAX_STEPS 100
+//#default MAX_DISTANCE 10000.0
 
-#default STEPS_WHITE 0.
-#default STEPS_BLACK 100.
+//#default STEPS_WHITE 0.
+//#default STEPS_BLACK 100.
 
-#default CAMERA_POSITION vec3(0., 0., -3.)
-#default CAMERA_ROTATION vec3(0., 0., 0.)
+//#default CAMERA_POSITION vec3(0., 0., -3.)
+//#default CAMERA_ROTATION vec3(0., 0., 0.)
+//#default CAMERA_FOCAL_LENGTH 1.0
+
+//#default ENABLE_SHADOWS false
+
+@group(0)
+@binding(0)
+var<uniform> uv_transform: mat3x3<f32>;
+
+@group(0)
+@binding(1)
+var<uniform> screen_size: vec2<u32>;
 
 struct SurfaceMaterial {
     color: vec3<f32>,
@@ -16,6 +26,26 @@ struct SurfaceMaterial {
 
 struct DeResult {
     distance: f32,
+    material: SurfaceMaterial,
+}
+
+struct RayCastConfig {
+    origin: vec3<f32>,
+    direction: vec3<f32>,
+    start_distance: f32,
+    max_distance: f32,
+
+    hit_distance: f32,
+    hit_scaling: f32,
+}
+
+struct RayCastResult {
+    hit: bool,
+    steps: i32,
+    point: vec3<f32>,
+    normal: vec3<f32>,
+    distance: f32,
+
     material: SurfaceMaterial,
 }
 
@@ -81,8 +111,7 @@ fn sphere_de(pos: vec3<f32>, radius: f32) -> DeResult {
 }
 
 
-fn get_normal(pos: vec3<f32>) -> vec3<f32> {
-    let small_step = HIT_DISTANCE / 2.;
+fn get_normal(pos: vec3<f32>, small_step: f32) -> vec3<f32> {
     let small_step_x = vec3(1., 0., 0.) * small_step;
     let small_step_y = vec3(0., 1., 0.) * small_step;
     let small_step_z = vec3(0., 0., 1.) * small_step;
@@ -94,28 +123,21 @@ fn get_normal(pos: vec3<f32>) -> vec3<f32> {
     ));
 }
 
-struct RayCastResult {
-    hit: bool,
-    steps: i32,
-    point: vec3<f32>,
-    normal: vec3<f32>,
-    distance: f32,
-
-    material: SurfaceMaterial,
-}
-
-fn cast_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
-    var traveled_distance: f32 = max(HIT_DISTANCE, world_de(origin).distance);
+fn cast_ray(config: RayCastConfig) -> RayCastResult {
+    var traveled_distance: f32 = config.start_distance;
 
     for (var i: i32 = 0; i < MARCH_MAX_STEPS; i++) {
-        var current_pos: vec3<f32> = origin + (dir * traveled_distance);
-        var rs = world_de(current_pos);
+        var current_pos: vec3<f32> =
+            config.origin + (config.direction * traveled_distance);
+        var hit_distance =
+            config.hit_distance * config.hit_scaling * traveled_distance;
 
-        if (rs.distance < HIT_DISTANCE) {
+        var rs = world_de(current_pos);
+        if (rs.distance < hit_distance) {
             var result: RayCastResult;
             result.steps = i;
             result.hit = true;
-            result.normal = get_normal(current_pos);
+            result.normal = get_normal(current_pos, hit_distance);
             result.distance = rs.distance;
             result.point = current_pos;
 
@@ -123,11 +145,11 @@ fn cast_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
             return result;
         }
 
-        if (traveled_distance > MAX_DISTANCE) {
+        if (traveled_distance > config.max_distance) {
             break;
         }
 
-        traveled_distance += max(HIT_DISTANCE, rs.distance);
+        traveled_distance += max(hit_distance, rs.distance);
     }
 
     var result: RayCastResult;
@@ -136,29 +158,42 @@ fn cast_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
     return result;
 }
 
-fn shaded_ray(origin: vec3<f32>, dir: vec3<f32>) -> RayCastResult {
-    var rs = cast_ray(origin, dir);
+fn shaded_ray(config: RayCastConfig) -> RayCastResult {
+    var rs = cast_ray(config);
     if (!rs.hit) { return rs; }
 
-    // let LIGHT_POSITION = vec3(0., 3., 0.);
     let light_direction = normalize(vec3(0.2, 1., 1.));
 
     if (rs.material.diffuse_strength > 0.) {
-        let hit_light = cast_ray(rs.point + rs.normal * HIT_DISTANCE, light_direction);
-        var diffuse_intensity: f32 = 0.2;
-        if (!hit_light.hit) {
-            diffuse_intensity = clamp(dot(rs.normal, light_direction), 0.2, 1.);
+        var should_light = true;
+
+        // Shadows
+        if (ENABLE_SHADOWS) {
+            var light_hit_config = config;
+            light_hit_config.origin =
+                rs.point + rs.normal * 0.01;
+            light_hit_config.start_distance = rs.distance;
+            light_hit_config.direction = light_direction;
+            let hit_light = cast_ray(light_hit_config);
+            should_light = should_light && hit_light.hit;
         }
-        rs.material.color *= 1. * (1. - rs.material.diffuse_strength) + diffuse_intensity * rs.material.diffuse_strength;
+
+        var diffuse_intensity: f32 = 0.2;
+        if (should_light) {
+            diffuse_intensity =
+                clamp(dot(rs.normal, light_direction), 0.2, 1.);
+        }
+        rs.material.color *= 1. * (1. - rs.material.diffuse_strength) +
+                             diffuse_intensity * rs.material.diffuse_strength;
     }
 
     return rs;
 }
 
-fn cast_bouncing_ray(init_point: vec3<f32>, init_dir: vec3<f32>) -> vec3<f32> {
-    var rs = shaded_ray(init_point, init_dir);
+fn cast_bouncing_ray(config: RayCastConfig) -> vec3<f32> {
+    var rs = shaded_ray(config);
     var total_color = rs.material.color;
-    var dir = init_dir;
+    var dir = config.direction;
 
     var oo_tint = 1. - (clamp(f32(rs.steps), STEPS_WHITE, STEPS_BLACK) - STEPS_WHITE) / (STEPS_BLACK - STEPS_WHITE);
     total_color *= oo_tint;
@@ -168,13 +203,19 @@ fn cast_bouncing_ray(init_point: vec3<f32>, init_dir: vec3<f32>) -> vec3<f32> {
         rs.hit && rs.material.reflexion_strength > 0. && i < 10u;
         i += 1u
     ) {
-        var reflexion = dir - 2. * dot(dir, rs.normal) * rs.normal;
+        var reflexion_config = config;
+        reflexion_config.direction =
+            dir - 2. * dot(dir, rs.normal) * rs.normal;
+        reflexion_config.origin = 
+            rs.point + reflexion_config.direction * config.hit_distance;
+        reflexion_config.start_distance = rs.distance;
 
-        var nrs = shaded_ray(rs.point + reflexion * HIT_DISTANCE, reflexion);
+        var nrs = shaded_ray(reflexion_config);
         var strength = rs.material.reflexion_strength;
-        total_color = total_color * (1. - strength) + nrs.material.color * strength;
+        total_color = total_color * (1. - strength) +
+                      nrs.material.color * strength;
 
-        dir = reflexion;
+        dir = reflexion_config.direction;
         rs = nrs;
     }
 
@@ -219,10 +260,6 @@ fn vertex_main(@builtin(vertex_index) in_vertex_index: u32) -> VertexOutput {
     return result;
 }
 
-@group(0)
-@binding(0)
-var<uniform> uv_transform: mat3x3<f32>;
-
 @fragment
 fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var color_sum: vec3<f32> = vec3(0.);
@@ -232,17 +269,28 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var y_angle = CAMERA_ROTATION.y;
     var rot_mat =  mat3x3(
         cos(y_angle),  0.,  sin(y_angle),
-        0.,          1.,  0.,
+        0.,            1.,  0.,
         -sin(y_angle), 0.,  cos(y_angle),
     );
 
-    var ray_direction = normalize(vec3(uv, 2.));
+    var ray_direction = normalize(vec3(uv, CAMERA_FOCAL_LENGTH));
     ray_direction *= rot_mat;
 
     var cam_pos = CAMERA_POSITION;
     cam_pos *= rot_mat;
 
-    return vec4(cast_bouncing_ray(cam_pos, ray_direction), 1.);
+    var config: RayCastConfig;
+    config.origin = cam_pos;
+    config.direction = ray_direction;
+    config.start_distance = 0.;
+    config.max_distance = 1000000.;
+    var screen_max_size = max(screen_size.x, screen_size.y);
+    config.hit_distance = 1. / f32(screen_max_size);
+    config.hit_scaling = 1. / CAMERA_FOCAL_LENGTH;
+
+    config.hit_scaling = 1.;
+
+    return vec4(cast_bouncing_ray(config), 1.);
 }
 
 // @compute

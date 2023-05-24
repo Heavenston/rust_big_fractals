@@ -71,6 +71,16 @@ impl Renderer {
                         min_binding_size: None
                     },
                     count: None
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::all(),
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None
+                    },
+                    count: None
                 }
             ],
         });
@@ -143,6 +153,15 @@ impl Renderer {
                 ]),
                 usage: wgpu::BufferUsages::UNIFORM
             });
+        let screen_size_buffer = self.device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::bytes_of(&[
+                    section.subdivisions * self.size,
+                    section.subdivisions * self.size
+                ]),
+                usage: wgpu::BufferUsages::UNIFORM
+            });
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.bind_group_layout,
@@ -150,6 +169,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: uv_transform_buffer.as_entire_binding()
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: screen_size_buffer.as_entire_binding()
                 }
             ]
         });

@@ -22,7 +22,7 @@ async fn preprocess(
     let mut out = String::new();
 
     for line in content.lines() {
-        if !line.starts_with('#') {
+        if !line.starts_with("//#") {
             out += context.vars.iter().fold(line.to_string(), |a, (k, v)| {
                 a.replace(k, v)
             }).as_str();
@@ -30,9 +30,9 @@ async fn preprocess(
             continue;
         }
 
-        if line.starts_with("#include \"") && line.trim_end().ends_with('"') {
+        if line.starts_with("//#include \"") && line.trim_end().ends_with('"') {
             let file_to_include = line
-                .strip_prefix("#include \"").unwrap()
+                .strip_prefix("//#include \"").unwrap()
                 .trim_end().strip_suffix("\"")
                 .unwrap();
             let ipath = path.with_file_name("").join(file_to_include);
@@ -40,16 +40,16 @@ async fn preprocess(
             out += &preprocess(&ipath, &tokio::fs::read_to_string(&ipath).await?, context).await?;
             out += "\n";
         }
-        else if line.starts_with("#define ") || line.starts_with("#default ") {
+        else if line.starts_with("//#define ") || line.starts_with("//#default ") {
             // Wdym its ugly ??
             let rest = line
-                .strip_prefix("#define ").unwrap_or(line)
-                .strip_prefix("#default ").unwrap_or(
-                    line.strip_prefix("#define ").unwrap_or(line)
+                .strip_prefix("//#define ").unwrap_or(line)
+                .strip_prefix("//#default ").unwrap_or(
+                    line.strip_prefix("//#define ").unwrap_or(line)
                 );
             let (variable_name, value) = rest.trim().split_once(' ')
                 .ok_or(anyhow!("Invalid preprocessor macro"))?;
-            if line.starts_with("#default ") && context.vars.contains_key(variable_name)
+            if line.starts_with("//#default ") && context.vars.contains_key(variable_name)
             { continue; }
             context.vars.insert(variable_name.into(), value.into());
         }
