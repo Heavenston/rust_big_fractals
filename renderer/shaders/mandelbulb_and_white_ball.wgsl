@@ -2,14 +2,14 @@
 //#define MAX_DISTANCE 100000000.0
 
 //#define STEPS_WHITE 0.
-//#define STEPS_BLACK 1000.
+//#define STEPS_BLACK 500.
 
 //#define CAMERA_POSITION vec3(0., 0., -3.)
 //#define CAMERA_ROTATION vec3(0., (3.14 / 4.) * 11.5, 0.)
 //#define CAMERA_FOCAL_LENGTH 2.5
 
 //#define LIGHT_DIRECTION normalize(vec3(0.2, 1., 1.))
-//#define ENABLE_SHADOWS true
+//#define ENABLE_SHADOWS false
 
 //#include "main.wgsl"
 

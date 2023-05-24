@@ -11,6 +11,7 @@
 //#default LIGHT_DIRECTION normalize(vec3(0.2, 1., 1.))
 
 //#default ENABLE_SHADOWS true
+//#default SHADOWS_MAX_STEPS 10
 
 @group(0)
 @binding(0)
@@ -36,6 +37,7 @@ struct RayCastConfig {
     direction: vec3<f32>,
     start_distance: f32,
     max_distance: f32,
+    max_steps: i32,
 
     hit_distance: f32,
     hit_scaling: f32,
@@ -128,7 +130,7 @@ fn get_normal(pos: vec3<f32>, small_step: f32) -> vec3<f32> {
 fn cast_ray(config: RayCastConfig) -> RayCastResult {
     var traveled_distance: f32 = config.start_distance;
 
-    for (var i: i32 = 0; i < MARCH_MAX_STEPS; i++) {
+    for (var i: i32 = 0; i < config.max_steps; i++) {
         var current_pos: vec3<f32> =
             config.origin + (config.direction * traveled_distance);
         var hit_distance =
@@ -178,6 +180,7 @@ fn shaded_ray(config: RayCastConfig) -> RayCastResult {
                 rs.point + rs.normal * hit_distance;
             light_hit_config.start_distance = rs.distance;
             light_hit_config.direction = light_direction;
+            light_hit_config.max_steps = SHADOWS_MAX_STEPS;
             let hit_light = cast_ray(light_hit_config);
             should_light = should_light && !hit_light.hit;
         }
@@ -291,6 +294,7 @@ fn fragment_main(v: VertexOutput) -> @location(0) vec4<f32> {
     var screen_max_size = max(screen_size.x, screen_size.y);
     config.hit_distance = 1. / f32(screen_max_size);
     config.hit_scaling = 1. / CAMERA_FOCAL_LENGTH;
+    config.max_steps = MARCH_MAX_STEPS;
 
     return vec4(cast_bouncing_ray(config), 1.);
 }
