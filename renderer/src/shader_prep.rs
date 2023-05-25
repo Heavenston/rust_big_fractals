@@ -1,10 +1,11 @@
-use std::{path::Path, collections::HashMap};
+use std::{path::{Path, PathBuf}, collections::{HashMap, HashSet}, io::Write};
 
 use anyhow::{ bail, anyhow};
 
 #[derive(Debug, Clone, Default)]
 struct PreprocessContext {
     vars: HashMap<String, String>,
+    included: HashSet<PathBuf>,
 }
 
 #[async_recursion::async_recursion]
@@ -36,8 +37,18 @@ async fn preprocess(
                 .trim_end().strip_suffix("\"")
                 .unwrap();
             let ipath = path.with_file_name("").join(file_to_include);
+            let canon_path = tokio::fs::canonicalize(ipath).await?;
+
+            if context.included.contains(&canon_path)
+            { continue; }
+            context.included.insert(canon_path.clone());
+
             out += "\n";
-            out += &preprocess(&ipath, &tokio::fs::read_to_string(&ipath).await?, context).await?;
+            out += &preprocess(
+                &canon_path,
+                &tokio::fs::read_to_string(&canon_path).await?,
+                context
+            ).await?;
             out += "\n";
         }
         else if line.starts_with("//#define ") || line.starts_with("//#default ") {

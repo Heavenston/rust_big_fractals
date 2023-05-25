@@ -343,9 +343,9 @@ impl BigImageApp {
         let transform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::bytes_of::<[f32; 12]>(&[
-                scale, 0. , dx,    /* PADDING */ 0.,
-                0. , scale, -dy,    /* PADDING */ 0.,
-                0. , 0. , 1.,    /* PADDING */ 0.,
+                scale,  0.   ,  dx ,    /* PADDING */ 0.,
+                0.   ,  scale, -dy ,    /* PADDING */ 0.,
+                0.   ,  0.   ,  1. ,    /* PADDING */ 0.,
             ]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
