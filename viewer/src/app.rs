@@ -563,7 +563,6 @@ impl BigImageApp {
                         },
                         ElementState::Released => {
                             self.pressed_keys.remove(&kc);
-                            self.just_pressed_keys.remove(&kc);
                         },
                     }
                 }
