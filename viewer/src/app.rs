@@ -13,6 +13,7 @@ use winit::{
     event_loop::{EventLoop, ControlFlow},
     window::{WindowBuilder, Window},
 };
+use itertools::Itertools;
 
 use crate::format::FormattedBigImage;
 
@@ -472,31 +473,45 @@ impl BigImageApp {
         let screen_right =  self.camera_x + 1. / self.camera_zoom;
 
         let mut s = 1u32;
+
+        let mut subdivisions: HashSet<(u32, u32)> =
+            (0..1).cartesian_product(0..1).collect();
         while s <= subdivis {
             if !self.image.is_level_available(s) { s *= 2; continue };
 
-            for sx in 0..s {
-                for sy in 0..s {
-                    let size = 2. / s as f32;
-                    let s_top    =  1. - size * sy as f32;
-                    let s_bottom =  s_top - size;
-                    let s_right  =  1. - size * (subdivis - sx - 1) as f32;
-                    let s_left   =  s_right - size;
+            let mut next_subdivisions = HashSet::<(u32, u32)>::default();
 
-                    let touch = s_left < screen_right && s_right > screen_left &&
-                                s_top > screen_bottom && s_bottom < screen_top;
-                    if touch {
-                        let present = self.image_sections.iter()
-                            .map(|is| is.position).any(|p| p.subdivisions == s && p.pos.0 == sx && p.pos.1 == sy);
-                        if !present {
-                            println!("Create {s}_{sx}x{sy}");
-                            self.create_section(SectionPosition {
-                                subdivisions: s, pos: (sx, sy)
-                            });
-                        }
+            for (sx, sy) in subdivisions.iter().copied() {
+                let size = 2. / s as f32;
+                let s_top    =  1. - size * sy as f32;
+                let s_bottom =  s_top - size;
+                let s_right  =  1. - size * (s - sx - 1) as f32;
+                let s_left   =  s_right - size;
+
+                let touch = s_left < screen_right && s_right > screen_left &&
+                            s_top > screen_bottom && s_bottom < screen_top;
+                if touch {
+                    next_subdivisions.extend(
+                        ((sx*2)..=(sx*2+1))
+                            .cartesian_product((sy*2)..=(sy*2+1))
+                    );
+
+                    let present = self.image_sections.iter()
+                        .map(|is| is.position)
+                        .any(|p|
+                            p.subdivisions == s &&
+                            p.pos.0 == sx && p.pos.1 == sy
+                        );
+                    if !present {
+                        println!("Create {s}_{sx}x{sy}");
+                        self.create_section(SectionPosition {
+                            subdivisions: s, pos: (sx, sy)
+                        });
                     }
                 }
             }
+
+            subdivisions = next_subdivisions;
 
             s *= 2;
         }
