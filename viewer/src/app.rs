@@ -493,7 +493,7 @@ impl BigImageApp {
             self.image.max_level_available().unwrap_or(subdivis)
         );
 
-        self.image_sections.drain_filter(|x| {
+        self.image_sections.extract_if(|x| {
             x.position.subdivisions > subdivis
         }).for_each(|_| ());
 

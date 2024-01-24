@@ -1,4 +1,4 @@
-#![feature(drain_filter)]
+#![feature(extract_if)]
 #![allow(dead_code)]
 use std::path::PathBuf;
 
