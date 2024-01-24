@@ -6,6 +6,7 @@ use std::{
     sync::{Arc, Mutex, atomic::AtomicBool}, path::Path, future::Future
 };
 
+use glyph_brush::{ab_glyph::FontRef, OwnedText};
 use image::EncodableLayout;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -58,6 +59,8 @@ struct BigImageApp {
     queue: wgpu::Queue,
 
     render_pipeline: wgpu::RenderPipeline,
+    brush: wgpu_text::TextBrush<FontRef<'static>>,
+    debug_text: wgpu_text::section::OwnedSection,
 
     viewport_bind_group_layout: wgpu::BindGroupLayout,
     viewport_bind_group: wgpu::BindGroup,
@@ -227,6 +230,30 @@ impl BigImageApp {
                 multiview: None,
             });
 
+        let font = include_bytes!("Inter-VariableFont_slnt,wght.ttf");
+        let brush = wgpu_text::BrushBuilder::using_font_bytes(font)
+            .unwrap().build(
+                &device,
+                &surface_config
+            );
+
+        use wgpu_text::section::*;
+        let debug_text = Section::default()
+            .add_text(
+                Text::new("Rendering: 0")
+                .with_scale(50.)
+                .with_color([0., 0., 0., 2.]),
+            )
+            .with_bounds((surface_config.width as f32 * 0.4, surface_config.height as f32))
+            .with_layout(
+                Layout::default()
+                    .v_align(VerticalAlign::Top)
+                    .h_align(HorizontalAlign::Left)
+                    .line_breaker(BuiltInLineBreaker::AnyCharLineBreaker),
+            )
+            .with_screen_position((10., 10.))
+            .to_owned();
+
         let this = Self {
             image: Arc::new(image),
 
@@ -241,6 +268,9 @@ impl BigImageApp {
             device, queue,
             
             render_pipeline,
+            brush,
+            debug_text,
+
             viewport_bind_group_layout,
             viewport_bind_group,
             viewport_transform_buffer,
@@ -516,6 +546,12 @@ impl BigImageApp {
             s *= 2;
         }
 
+        self.debug_text = self.debug_text.clone().with_text(vec![
+            OwnedText::new(format!("Rendering: {}", self.image.render_queue_length()))
+                .with_scale(50.)
+                .with_color([0., 0., 0., 2.])
+        ]);
+
         self.just_pressed_keys.clear();
     }
 
@@ -547,6 +583,17 @@ impl BigImageApp {
                     self.surface_config.width = size.width;
                     self.surface_config.height = size.height;
                     self.surface.configure(&self.device, &self.surface_config);
+                    
+                    self.debug_text.bounds = (
+                        self.surface_config.width as f32 * 0.4,
+                        self.surface_config.height as _
+                    );
+                    self.brush.resize_view(
+                        self.surface_config.width as f32,
+                        self.surface_config.height as f32,
+                        &self.queue
+                    );
+
                     self.window.request_redraw();
                 }
                 Event::WindowEvent {
@@ -599,6 +646,9 @@ impl BigImageApp {
     }
 
     pub fn redraw(&mut self) {
+        self.brush.queue(&self.debug_text);
+        self.brush.process_queued(&self.device, &self.queue).unwrap();
+
         let frame = self.surface
             .get_current_texture()
             .expect("Failed to acquire next swap chain texture");
@@ -622,6 +672,7 @@ impl BigImageApp {
                 })],
                 depth_stencil_attachment: None,
             });
+
             rpass.set_pipeline(&self.render_pipeline);
             rpass.set_bind_group(0, &self.viewport_bind_group, &[]);
             self.image_sections.sort_unstable_by_key(|p| p.position.subdivisions);
@@ -633,6 +684,10 @@ impl BigImageApp {
         }
 
         self.queue.submit(Some(encoder.finish()));
+        self.queue.submit(Some(
+            self.brush.draw(&self.device, &view)
+        ));
+
         frame.present();
     }
 }

@@ -9,6 +9,7 @@ edition = "2021"
 bytemuck = "1.13.1"
 clap = { version = "4.3.0", features = ["derive"] }
 env_logger = "0.10.0"
+glyph_brush = "0.7.7"
 image = { version = "0.24.6", features = ["webp-encoder"] }
 itertools = "0.10.5"
 log = "0.4.17"
@@ -17,4 +18,5 @@ serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
 tokio = { version = "1.28.1", features = ["rt", "fs", "macros", "rt-multi-thread", "process", "sync"] }
 wgpu = "0.16.0"
+wgpu_text = "0.7.1"
 winit = "0.28.6"

@@ -1,4 +1,4 @@
-//#define MARCH_MAX_STEPS 1000
+//#define MARCH_MAX_STEPS 100000
 //#define MAX_DISTANCE 10000.0
 
 //#define STEPS_WHITE 0.
@@ -10,7 +10,7 @@
 
 //#define LIGHT_DIRECTION normalize(vec3(-3., 1., -3.))
 
-//#define ENABLE_SHADOWS true
+//#define ENABLE_SHADOWS false
 //#define SHADOWS_MAX_STEPS 1000
 
 //#include "../main.wgsl"
